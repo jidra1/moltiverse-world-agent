@@ -196,6 +196,7 @@ function createAgent(id, agentClass) {
     score: 0,
     kills: 0,
     alive: true,
+    verified: false,
     enteredAt: Date.now(),
     lastActionTick: 0
   };

@@ -30,6 +30,8 @@ async function verifyEntry(agentId, proof) {
   const walletAddress = proof?.walletAddress;
   const signature = proof?.signature;
 
+  let verified = false;
+
   if (walletAddress && publicClient) {
     // Verify wallet ownership via signed message
     if (signature) {
@@ -57,19 +59,20 @@ async function verifyEntry(agentId, proof) {
         };
       }
       console.log(`Gate: verified ${walletAddress} — balance ${balance} MON (wei)`);
+      verified = true;
     } catch (err) {
       if (err.message?.includes('fetch') || err.message?.includes('ECONNREFUSED') || err.message?.includes('timeout')) {
         console.warn(`Gate: Monad RPC unreachable — ${err.message}. Falling back to dev mode.`);
       } else {
         console.warn(`Gate: on-chain verification failed — ${err.message}. Falling back to dev mode.`);
       }
-      // Fall through to dev mode approval
+      // Fall through to dev mode approval (verified stays false)
     }
   }
 
-  // Dev mode: auto-approve when no wallet or chain unavailable
+  // Allow entry — verified only when wallet + signature + balance all passed
   enteredAgents.add(agentId);
-  return { allowed: true };
+  return { allowed: true, verified };
 }
 
 function resetGate() {

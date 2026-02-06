@@ -130,6 +130,11 @@ function loadWorld(world) {
         agent.lastActionTick = data.tick || 0;
       }
 
+      // Default verified for agents saved before freemium gate
+      if (agent.verified == null) {
+        agent.verified = false;
+      }
+
       // Floor negative inventory values to 0
       for (const resource of Object.keys(agent.inventory)) {
         if (agent.inventory[resource] < 0) {
