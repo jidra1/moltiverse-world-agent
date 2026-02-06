@@ -156,7 +156,12 @@ export class WorldRenderer {
     }
     this.resourceMeshes.clear();
 
-    const resourceGeo = new THREE.BoxGeometry(0.2, 0.15, 0.2);
+    // Distinct geometry per resource type
+    const geos = {
+      wood: new THREE.CylinderGeometry(0.08, 0.08, 0.3, 8),   // logs
+      stone: new THREE.BoxGeometry(0.2, 0.18, 0.2),             // blocks
+      gold: new THREE.OctahedronGeometry(0.12),                  // gems
+    };
 
     // Only render a sparse set for visual effect (every 3rd tile)
     for (const [key, data] of this.resourceCounts) {
@@ -168,15 +173,25 @@ export class WorldRenderer {
       if ((x + y) % 3 !== 0) continue;
 
       const color = RESOURCE_COLORS[data.resource] || 0xffffff;
+      const geo = geos[data.resource] || geos.stone;
       const material = new THREE.MeshLambertMaterial({ color });
       const count = Math.min(data.count, 5);
-      const mesh = new THREE.Mesh(resourceGeo, material);
+      const mesh = new THREE.Mesh(geo, material);
+      const baseY = data.resource === 'gold' ? 0.15 : 0.1;
       mesh.position.set(
         x - GRID_SIZE / 2 + 0.5 + 0.3,
-        0.075 * count,
+        baseY + 0.04 * count,
         y - GRID_SIZE / 2 + 0.5 + 0.3
       );
-      mesh.scale.y = count;
+      // Stack effect based on count
+      if (data.resource === 'wood') {
+        mesh.rotation.x = Math.PI / 2;
+        mesh.scale.set(1, count * 0.6, 1);
+      } else if (data.resource === 'gold') {
+        mesh.scale.setScalar(0.8 + count * 0.15);
+      } else {
+        mesh.scale.set(1, count * 0.5, 1);
+      }
       this.gridGroup.add(mesh);
       this.resourceMeshes.set(key, mesh);
     }

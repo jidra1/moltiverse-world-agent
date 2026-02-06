@@ -8,17 +8,21 @@ import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
 
 // --- Scene Setup ---
+const SIDEBAR_WIDTH = 320;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
 scene.background = new THREE.Color(0x080810);
 scene.fog = new THREE.FogExp2(0x080810, 0.015);
 
-const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
+function canvasWidth() { return window.innerWidth - SIDEBAR_WIDTH; }
+function canvasHeight() { return window.innerHeight; }
+
+const camera = new THREE.PerspectiveCamera(60, canvasWidth() / canvasHeight(), 0.1, 200);
 camera.position.set(0, 30, 25);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
-renderer.setSize(window.innerWidth, window.innerHeight);
+renderer.setSize(canvasWidth(), canvasHeight());
 renderer.setPixelRatio(window.devicePixelRatio);
 container.appendChild(renderer.domElement);
 
@@ -102,6 +106,7 @@ function handleMessage(msg) {
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
+          ui.trackEvent(event);
           triggerEffect(event);
         }
       }
@@ -131,6 +136,7 @@ function handleMessage(msg) {
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
+          ui.trackEvent(event);
           triggerEffect(event);
         }
       }
@@ -191,8 +197,8 @@ const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
 
 renderer.domElement.addEventListener('mousemove', (event) => {
-  mouse.x = (event.clientX / window.innerWidth) * 2 - 1;
-  mouse.y = -(event.clientY / window.innerHeight) * 2 + 1;
+  mouse.x = (event.clientX / canvasWidth()) * 2 - 1;
+  mouse.y = -(event.clientY / canvasHeight()) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
   const intersects = raycaster.intersectObjects(worldRenderer.tileMeshes);
@@ -216,9 +222,9 @@ renderer.domElement.addEventListener('mousemove', (event) => {
 
 // --- Resize ---
 window.addEventListener('resize', () => {
-  camera.aspect = window.innerWidth / window.innerHeight;
+  camera.aspect = canvasWidth() / canvasHeight();
   camera.updateProjectionMatrix();
-  renderer.setSize(window.innerWidth, window.innerHeight);
+  renderer.setSize(canvasWidth(), canvasHeight());
 });
 
 // --- Animation Loop ---

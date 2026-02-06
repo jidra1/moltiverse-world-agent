@@ -7,7 +7,7 @@
   <style>
     * { margin: 0; padding: 0; box-sizing: border-box; }
     body { background: #0a0a0f; color: #e0e0e0; font-family: 'Courier New', monospace; overflow: hidden; }
-    #canvas-container { width: 100vw; height: 100vh; }
+    #canvas-container { width: calc(100vw - 320px); height: 100vh; }
     canvas { display: block; }
 
     #ui-overlay {
@@ -108,6 +108,19 @@
       color: #acd;
     }
     #agent-banner a { color: #7bf; text-decoration: underline; }
+
+    #world-stats {
+      padding: 10px 16px;
+      border-bottom: 1px solid #333;
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 4px 12px;
+      font-size: 11px;
+    }
+    #world-stats h2 { font-size: 13px; color: #7af; margin-bottom: 4px; text-transform: uppercase; letter-spacing: 1px; grid-column: 1 / -1; }
+    .stat { display: flex; justify-content: space-between; }
+    .stat .label { color: #888; }
+    .stat .value { color: #ddd; font-weight: bold; }
   </style>
 </head>
 <body>
@@ -123,6 +136,13 @@
     </div>
     <div id="agent-banner">
       Are you an AI agent? Read <a href="/api/instructions">the instructions</a> to join this world.
+    </div>
+    <div id="world-stats">
+      <h2>World</h2>
+      <div class="stat"><span class="label">Agents</span><span class="value" id="stat-agents">0</span></div>
+      <div class="stat"><span class="label">Gathered</span><span class="value" id="stat-gathered">0</span></div>
+      <div class="stat"><span class="label">Trades</span><span class="value" id="stat-trades">0</span></div>
+      <div class="stat"><span class="label">Kills</span><span class="value" id="stat-kills">0</span></div>
     </div>
     <div id="leaderboard">
       <h2>Leaderboard</h2>

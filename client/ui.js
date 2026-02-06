@@ -7,6 +7,13 @@ export class UI {
     this.logEl = document.getElementById('log-entries');
     this.statusEl = document.getElementById('connection-status');
     this.tooltipEl = document.getElementById('tooltip');
+    this.statEls = {
+      agents: document.getElementById('stat-agents'),
+      gathered: document.getElementById('stat-gathered'),
+      trades: document.getElementById('stat-trades'),
+      kills: document.getElementById('stat-kills'),
+    };
+    this.stats = { gathered: 0, trades: 0, kills: 0 };
     this.maxLogEntries = 100;
   }
 
@@ -19,7 +26,21 @@ export class UI {
     this.tickEl.textContent = tick;
   }
 
+  updateStats(agents) {
+    this.statEls.agents.textContent = Object.keys(agents).length;
+    this.statEls.gathered.textContent = this.stats.gathered;
+    this.statEls.trades.textContent = this.stats.trades;
+    this.statEls.kills.textContent = this.stats.kills;
+  }
+
+  trackEvent(event) {
+    if (event.type === 'gather') this.stats.gathered++;
+    else if (event.type === 'trade') this.stats.trades++;
+    else if (event.type === 'kill') this.stats.kills++;
+  }
+
   updateLeaderboard(agents) {
+    this.updateStats(agents);
     const sorted = Object.values(agents)
       .sort((a, b) => b.score - a.score)
       .slice(0, 10);
