@@ -2,6 +2,8 @@ node_modules/
 world-state.json
 .DS_Store
 client/dist/
+client/client/
+dist/
 plan.md
 .env
 demo-video/
