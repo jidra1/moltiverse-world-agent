@@ -2,12 +2,15 @@
 
 import express from 'express';
 import { createServer } from 'http';
+import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
 import { createWorld } from './world.js';
 import { processActionQueue, regenerateHp } from './actions.js';
 import { regenerateResources } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
 import { loadEnteredAgents } from './gate.js';
+
+const AGENT_INSTRUCTIONS = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
 
 const PORT = process.env.PORT || 3000;
 const TICK_INTERVAL = 5000; // 5 seconds
@@ -126,6 +129,11 @@ app.get('/api/leaderboard', (req, res) => {
 app.get('/api/events', (req, res) => {
   const limit = Math.min(parseInt(req.query.limit) || 50, 200);
   res.json(world.eventLog.slice(-limit));
+});
+
+// Agent instructions (machine-readable)
+app.get('/api/instructions', (req, res) => {
+  res.type('text/markdown').send(AGENT_INSTRUCTIONS);
 });
 
 // --- Tick Loop ---
