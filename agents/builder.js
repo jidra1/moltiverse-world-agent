@@ -50,7 +50,11 @@ async function run() {
 
     try {
       const me = await getMyState();
-      if (me.error) continue;
+      if (me.error) {
+        console.log(`[${AGENT_ID}] Not found, re-entering...`);
+        await api('POST', '/api/enter', { agentId: AGENT_ID, class: 'builder' });
+        continue;
+      }
 
       const totalItems = Object.values(me.inventory).reduce((a, b) => a + b, 0);
       const currentTarget = TARGETS[targetIndex];
