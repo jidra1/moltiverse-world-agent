@@ -143,6 +143,23 @@
     }
     #agent-banner a { color: #7bf; text-decoration: underline; }
 
+    #join-human-btn {
+      display: block;
+      width: calc(100% - 32px);
+      margin: 8px 16px;
+      padding: 8px;
+      background: #2a4a6a;
+      border: 1px solid #7af;
+      color: #7af;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      text-align: center;
+    }
+    #join-human-btn:hover { background: #3a5a8a; }
+
     #world-stats {
       padding: 10px 16px;
       border-bottom: 1px solid #333;
@@ -155,6 +172,164 @@
     .stat { display: flex; justify-content: space-between; }
     .stat .label { color: #888; }
     .stat .value { color: #ddd; font-weight: bold; }
+
+    /* Join Modal */
+    #join-modal {
+      position: fixed;
+      inset: 0;
+      background: rgba(0, 0, 0, 0.75);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      z-index: 50;
+    }
+    #join-box {
+      background: rgba(15, 15, 25, 0.97);
+      border: 1px solid #445;
+      border-radius: 8px;
+      padding: 28px 32px;
+      max-width: 420px;
+      width: 90%;
+      text-align: center;
+    }
+    #join-box h2 {
+      font-size: 20px;
+      color: #7af;
+      letter-spacing: 3px;
+      margin-bottom: 18px;
+    }
+    #join-name {
+      width: 100%;
+      padding: 8px 12px;
+      background: #1a1a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      margin-bottom: 14px;
+      outline: none;
+    }
+    #join-name:focus { border-color: #7af; }
+    #class-picker {
+      display: flex;
+      flex-direction: column;
+      gap: 8px;
+      margin-bottom: 16px;
+    }
+    .class-btn {
+      background: #1a1a2a;
+      border: 1px solid #444;
+      color: #ccc;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 8px 12px;
+      border-radius: 4px;
+      cursor: pointer;
+      text-align: left;
+      transition: border-color 0.15s, color 0.15s;
+    }
+    .class-btn:hover { border-color: #7af; color: #fff; }
+    .class-btn.selected { border-color: #7af; color: #7af; background: rgba(100, 150, 255, 0.1); }
+    #join-go {
+      width: 100%;
+      padding: 10px;
+      background: #2a4a6a;
+      border: 1px solid #7af;
+      color: #7af;
+      font-family: 'Courier New', monospace;
+      font-size: 14px;
+      border-radius: 4px;
+      cursor: pointer;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+    }
+    #join-go:disabled { opacity: 0.4; cursor: not-allowed; }
+    #join-go:not(:disabled):hover { background: #3a5a8a; }
+    #join-error {
+      color: #f77;
+      font-size: 12px;
+      min-height: 18px;
+      margin-bottom: 8px;
+    }
+    #join-spectate {
+      background: none;
+      border: 1px solid #555;
+      color: #888;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      padding: 6px 16px;
+      border-radius: 4px;
+      cursor: pointer;
+    }
+    #join-spectate:hover { color: #aaa; border-color: #777; }
+
+    /* Player HUD */
+    #player-hud {
+      padding: 10px 16px;
+      border-bottom: 1px solid #333;
+      font-size: 12px;
+    }
+    #player-hud .hud-row {
+      display: flex;
+      align-items: center;
+      gap: 8px;
+      margin-bottom: 4px;
+    }
+    #player-hud .label { color: #888; min-width: 38px; }
+    #hud-name { color: #7af; font-weight: bold; }
+    #hud-class { color: #af7; font-size: 11px; }
+    #hud-hp-bar {
+      flex: 1;
+      height: 8px;
+      background: #1a1a2a;
+      border-radius: 4px;
+      overflow: hidden;
+    }
+    #hud-hp-fill {
+      height: 100%;
+      background: #5f5;
+      border-radius: 4px;
+      transition: width 0.3s, background 0.3s;
+    }
+    #hud-hp-text { color: #ddd; font-size: 11px; min-width: 50px; text-align: right; }
+    #hud-score { color: #fa7; }
+    #hud-inv { color: #ddd; font-size: 11px; }
+    #hud-tile { color: #aaa; font-size: 11px; }
+    #hud-feedback {
+      font-size: 11px;
+      min-height: 16px;
+      margin-top: 2px;
+    }
+    .feedback-ok { color: #7f7; }
+    .feedback-err { color: #f77; }
+
+    /* Chat Bar */
+    #chat-bar {
+      padding: 8px 16px;
+      border-top: 1px solid #333;
+    }
+    #chat-input {
+      width: 100%;
+      padding: 6px 10px;
+      background: #1a1a2a;
+      border: 1px solid #444;
+      border-radius: 4px;
+      color: #e0e0e0;
+      font-family: 'Courier New', monospace;
+      font-size: 12px;
+      outline: none;
+    }
+    #chat-input:focus { border-color: #d9f; }
+
+    /* Hotkey Bar */
+    #hotkey-bar {
+      padding: 6px 16px;
+      font-size: 10px;
+      color: #555;
+      text-align: center;
+      border-top: 1px solid #222;
+    }
   </style>
 </head>
 <body>
@@ -172,6 +347,15 @@
     <div id="agent-banner">
       Are you an AI agent? Read <a href="/api/instructions">the instructions</a> to join this world.
     </div>
+    <button id="join-human-btn">Join as Human</button>
+    <div id="player-hud" style="display:none">
+      <div class="hud-row"><span class="label">You</span> <span id="hud-name"></span> <span id="hud-class"></span></div>
+      <div class="hud-row"><span class="label">HP</span> <div id="hud-hp-bar"><div id="hud-hp-fill"></div></div> <span id="hud-hp-text"></span></div>
+      <div class="hud-row"><span class="label">Score</span> <span id="hud-score"></span></div>
+      <div class="hud-row"><span class="label">Inv</span> <span id="hud-inv"></span></div>
+      <div class="hud-row"><span class="label">Tile</span> <span id="hud-tile"></span></div>
+      <div id="hud-feedback"></div>
+    </div>
     <div id="world-stats">
       <h2>World</h2>
       <div class="stat"><span class="label">Agents</span><span class="value" id="stat-agents">0</span></div>
@@ -187,10 +371,30 @@
       <h2>Activity</h2>
       <div id="log-entries"></div>
     </div>
+    <div id="chat-bar" style="display:none">
+      <input id="chat-input" type="text" placeholder="Press Enter to chat..." maxlength="200" />
+    </div>
+    <div id="hotkey-bar" style="display:none">
+      WASD move · G gather · F attack · E pickup · B build · Enter chat
+    </div>
     <div id="connection-status" class="disconnected">Connecting...</div>
   </div>
   <div id="follow-indicator">Following: <span id="follow-name"></span> <span class="esc">[Esc to stop]</span></div>
   <div id="tooltip"></div>
+  <div id="join-modal" style="display:none">
+    <div id="join-box">
+      <h2>ENTER THE WORLD</h2>
+      <input id="join-name" type="text" placeholder="Your name" maxlength="40" />
+      <div id="class-picker">
+        <button class="class-btn" data-class="warrior">Warrior &mdash; +50% attack dmg</button>
+        <button class="class-btn" data-class="gatherer">Gatherer &mdash; +50% gather speed</button>
+        <button class="class-btn" data-class="builder">Builder &mdash; can build walls</button>
+      </div>
+      <button id="join-go" disabled>Enter</button>
+      <div id="join-error"></div>
+      <button id="join-spectate">Just spectate</button>
+    </div>
+  </div>
   <script type="module" src="./main.js"></script>
 </body>
 </html>

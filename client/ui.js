@@ -95,6 +95,26 @@ export class UI {
   hideTooltip() {
     this.tooltipEl.style.display = 'none';
   }
+
+  updatePlayerHUD(agent, worldState) {
+    const pct = Math.max(0, Math.min(100, (agent.hp / (agent.maxHp || 100)) * 100));
+    const hpFill = document.getElementById('hud-hp-fill');
+    hpFill.style.width = pct + '%';
+    // Green → yellow → red
+    if (pct > 50) hpFill.style.background = '#5f5';
+    else if (pct > 25) hpFill.style.background = '#fd7';
+    else hpFill.style.background = '#f55';
+
+    document.getElementById('hud-hp-text').textContent = `${agent.hp} / ${agent.maxHp || 100}`;
+    document.getElementById('hud-score').textContent = agent.score + ' pts';
+
+    const inv = agent.inventory || {};
+    document.getElementById('hud-inv').textContent =
+      `W:${inv.wood || 0}  S:${inv.stone || 0}  G:${inv.gold || 0}`;
+
+    document.getElementById('hud-tile').textContent =
+      `(${agent.x}, ${agent.y})  ${agent.zone || ''}`;
+  }
 }
 
 function formatEvent(event) {

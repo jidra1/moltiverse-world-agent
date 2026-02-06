@@ -11,6 +11,7 @@ import { AgentRenderer } from './agent-renderer.js';
 import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
 import { SoundManager } from './sounds.js';
+import { Player } from './player.js';
 
 // --- Scene Setup ---
 const GRID_SIZE = 64;
@@ -50,19 +51,69 @@ controls.target.set(0, 0, 0);
 
 const MAP_HALF = GRID_SIZE / 2 + 15; // allow some pan beyond the grid edge
 
-// --- Keyboard pan (WASD / Arrow keys) ---
+// --- Player ---
+const player = new Player();
+let selectedTargetId = null;
+let feedbackTimer = null;
+const chatInput = document.getElementById('chat-input');
+
+// --- Keyboard ---
 const keysDown = new Set();
+const moveMap = { w:'up', ArrowUp:'up', s:'down', ArrowDown:'down',
+                  a:'left', ArrowLeft:'left', d:'right', ArrowRight:'right' };
+
 window.addEventListener('keydown', (e) => {
+  // Enter focuses chat input
+  if (e.key === 'Enter' && player.agentId && document.activeElement !== chatInput) {
+    chatInput.focus();
+    e.preventDefault();
+    return;
+  }
+
+  // Don't capture keys when typing in an input
+  if (document.activeElement?.tagName === 'INPUT') return;
+
+  // Escape: stop following / deselect
+  if (e.key === 'Escape') {
+    if (followAgentId) { followAgentId = null; ui.setFollowTarget(null); }
+    return;
+  }
+
+  // Player mode: WASD = move, Shift+WASD = camera pan
+  if (player.agentId && !e.shiftKey) {
+    if (moveMap[e.key]) {
+      e.preventDefault();
+      player.move(moveMap[e.key]).then(r => showFeedback(r));
+      return;
+    }
+    if (e.key === 'g') { player.gather().then(r => showFeedback(r)); return; }
+    if (e.key === 'e') { player.pickup().then(r => showFeedback(r)); return; }
+    if (e.key === 'b') { player.build().then(r => showFeedback(r)); return; }
+    if (e.key === 'f' && selectedTargetId) {
+      player.attack(selectedTargetId).then(r => showFeedback(r));
+      return;
+    }
+  }
+
+  // Spectator / Shift+WASD: camera pan (existing behavior)
   if (['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
     keysDown.add(e.key);
     e.preventDefault();
   }
-  if (e.key === 'Escape' && followAgentId) {
-    followAgentId = null;
-    ui.setFollowTarget(null);
-  }
 });
 window.addEventListener('keyup', (e) => keysDown.delete(e.key));
+
+// Chat input handler
+chatInput.addEventListener('keydown', (e) => {
+  if (e.key === 'Enter') {
+    const msg = chatInput.value.trim();
+    if (msg) player.speak(msg).then(r => showFeedback(r));
+    chatInput.value = '';
+    chatInput.blur();
+    e.stopPropagation();
+  }
+  if (e.key === 'Escape') { chatInput.blur(); }
+});
 
 // Lighting — warm ground bounce + purple fill
 const hemiLight = new THREE.HemisphereLight(0x8899cc, 0xc97840, 1.5);
@@ -186,6 +237,7 @@ function handleMessage(msg) {
     ui.updateLeaderboard(worldState.agents);
     worldRenderer.updateResources(worldState.activeTiles || []);
     agentRenderer.updateAgents(worldState.agents);
+    updatePlayerHUD();
 
     // Load initial events
     if (worldState.events) {
@@ -216,6 +268,7 @@ function handleMessage(msg) {
       }
       ui.updateLeaderboard(worldState.agents);
       agentRenderer.updateAgents(worldState.agents);
+      updatePlayerHUD();
     }
 
     // Add new events
@@ -326,12 +379,17 @@ renderer.domElement.addEventListener('click', (event) => {
   if (hits.length > 0) {
     const agentId = agentRenderer.findAgentFromObject(hits[0].object);
     if (agentId) {
+      // In player mode, clicking another agent selects them as target (for attack)
+      if (player.agentId && agentId !== player.agentId) {
+        selectedTargetId = agentId;
+      }
       followAgentId = agentId;
       ui.setFollowTarget(agentId);
       return;
     }
   }
-  // Clicked empty space — stop following
+  // Clicked empty space — stop following, clear target
+  selectedTargetId = null;
   if (followAgentId) {
     followAgentId = null;
     ui.setFollowTarget(null);
@@ -418,15 +476,16 @@ function animate() {
     }
   }
 
-  // Camera follow mode — smoothly track the followed agent
-  if (followAgentId) {
-    const pos = agentRenderer.getAgentWorldPosition(followAgentId);
+  // Camera follow mode — auto-follow player, or follow clicked agent
+  const effectiveFollow = player.agentId || followAgentId;
+  if (effectiveFollow) {
+    const pos = agentRenderer.getAgentWorldPosition(effectiveFollow);
     if (pos) {
       const offset = camera.position.clone().sub(controls.target);
       controls.target.lerp(pos, 0.08);
       camera.position.copy(controls.target).add(offset);
-    } else {
-      // Agent gone — stop following
+    } else if (!player.agentId) {
+      // Non-player follow target gone — stop following
       followAgentId = null;
       ui.setFollowTarget(null);
     }
@@ -441,6 +500,76 @@ function animate() {
 
   composer.render();
 }
+
+// --- Player HUD ---
+function updatePlayerHUD() {
+  if (!player.agentId) return;
+  const agent = player.getAgent(worldState);
+  if (!agent) return;
+  ui.updatePlayerHUD(agent, worldState);
+}
+
+function showFeedback(result) {
+  if (!result) return;
+  const el = document.getElementById('hud-feedback');
+  el.textContent = result.success ? (result.message || 'OK') : result.reason;
+  el.className = result.success ? 'feedback-ok' : 'feedback-err';
+  clearTimeout(feedbackTimer);
+  feedbackTimer = setTimeout(() => { el.textContent = ''; }, 2000);
+}
+
+function showPlayerUI() {
+  document.getElementById('player-hud').style.display = '';
+  document.getElementById('chat-bar').style.display = '';
+  document.getElementById('hotkey-bar').style.display = '';
+  document.getElementById('hud-name').textContent = player.agentId;
+  document.getElementById('hud-class').textContent = player.agentClass;
+}
+
+// --- Join Modal ---
+const joinModal = document.getElementById('join-modal');
+const joinNameInput = document.getElementById('join-name');
+const joinGoBtn = document.getElementById('join-go');
+const joinError = document.getElementById('join-error');
+const joinHumanBtn = document.getElementById('join-human-btn');
+let selectedClass = null;
+
+joinHumanBtn.onclick = () => {
+  joinModal.style.display = '';
+};
+
+document.querySelectorAll('.class-btn').forEach(btn => {
+  btn.onclick = () => {
+    document.querySelectorAll('.class-btn').forEach(b => b.classList.remove('selected'));
+    btn.classList.add('selected');
+    selectedClass = btn.dataset.class;
+    joinGoBtn.disabled = !joinNameInput.value.trim();
+  };
+});
+
+joinNameInput.addEventListener('input', () => {
+  joinGoBtn.disabled = !joinNameInput.value.trim() || !selectedClass;
+});
+
+joinGoBtn.onclick = async () => {
+  const name = joinNameInput.value.trim();
+  if (!name || !selectedClass) return;
+  joinGoBtn.disabled = true;
+  joinError.textContent = '';
+  const result = await player.enter(name, selectedClass);
+  if (result.success) {
+    joinModal.style.display = 'none';
+    joinHumanBtn.style.display = 'none';
+    showPlayerUI();
+  } else {
+    joinError.textContent = result.reason;
+    joinGoBtn.disabled = false;
+  }
+};
+
+document.getElementById('join-spectate').onclick = () => {
+  joinModal.style.display = 'none';
+};
 
 // --- Start ---
 connectWS();
