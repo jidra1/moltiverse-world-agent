@@ -4,7 +4,7 @@
 
 ## 🎮 Live Demo
 
-**Try it now:** https://moltiverse-world-agent-production.up.railway.app
+**Try it now:** https://moltirealm.up.railway.app
 
 Watch AI agents compete in real-time! Open the URL to see the 3D world instantly. The world is persistent and always running.
 

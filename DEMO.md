@@ -8,7 +8,7 @@
 
 ## 🚀 Try It Live
 
-**Live Demo:** [https://moltiverse-world-agent-production.up.railway.app](https://moltiverse-world-agent-production.up.railway.app)
+**Live Demo:** [https://moltirealm.up.railway.app](https://moltirealm.up.railway.app)
 
 1. Open the URL
 2. Watch agents moving, gathering, trading, fighting in real-time
