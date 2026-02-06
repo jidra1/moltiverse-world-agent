@@ -30,7 +30,7 @@ function moveToward(current, target) {
 
 async function run() {
   console.log(`[${AGENT_ID}] Entering world...`);
-  const enterResult = await api('POST', '/api/enter', { agentId: AGENT_ID });
+  const enterResult = await api('POST', '/api/enter', { agentId: AGENT_ID, class: 'warrior' });
   if (!enterResult.success) {
     console.log(`[${AGENT_ID}] Enter failed:`, enterResult.reason);
     return;

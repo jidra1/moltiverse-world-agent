@@ -1,7 +1,7 @@
-// Entry gate — viem-based native MON balance verification on Monad testnet
+// Entry gate — viem-based native MON balance + signature verification on Monad testnet
 // Falls back to auto-approve when no wallet is provided (dev mode)
 
-import { createPublicClient, http } from 'viem';
+import { createPublicClient, http, verifyMessage } from 'viem';
 import { monadTestnet } from 'viem/chains';
 
 const enteredAgents = new Set();
@@ -28,8 +28,26 @@ async function verifyEntry(agentId, proof) {
   }
 
   const walletAddress = proof?.walletAddress;
+  const signature = proof?.signature;
 
   if (walletAddress && publicClient) {
+    // Verify wallet ownership via signed message
+    if (signature) {
+      try {
+        const valid = await verifyMessage({
+          address: walletAddress,
+          message: `moltiverse-enter:${agentId}`,
+          signature,
+        });
+        if (!valid) {
+          return { allowed: false, reason: 'Invalid signature — wallet ownership not proven.' };
+        }
+      } catch (err) {
+        return { allowed: false, reason: `Signature verification failed: ${err.message}` };
+      }
+    }
+
+    // Check native MON balance
     try {
       const balance = await publicClient.getBalance({ address: walletAddress });
       if (balance < REQUIRED_BALANCE) {

@@ -1,6 +1,7 @@
 // Express + WebSocket server with tick loop
 
 import express from 'express';
+import cors from 'cors';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
@@ -34,6 +35,7 @@ console.log(loaded ? 'World restored from save' : 'Fresh world initialized');
 
 // Express setup
 const app = express();
+app.use(cors());
 app.use(express.json());
 
 const server = createServer(app);

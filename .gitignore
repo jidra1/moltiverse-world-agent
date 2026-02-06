@@ -1,3 +1,4 @@
 node_modules/
 world-state.json
 .DS_Store
+client/dist/
