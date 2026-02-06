@@ -2,6 +2,7 @@
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
 import { GRID_SIZE } from './world.js';
+import { serializeAlliances, loadAlliances } from './alliance.js';
 
 const STATE_FILE = 'world-state.json';
 
@@ -12,7 +13,9 @@ function saveWorld(world) {
     agents: world.agents,
     eventLog: world.eventLog.slice(-50), // Keep last 50 events in save
     // Save resource counts per tile (not full grid to save space)
-    resources: serializeResources(world.grid)
+    resources: serializeResources(world.grid),
+    walls: serializeWalls(world.grid),
+    alliances: serializeAlliances()
   };
 
   try {
@@ -34,6 +37,19 @@ function serializeResources(grid) {
     }
   }
   return resources;
+}
+
+function serializeWalls(grid) {
+  const walls = [];
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const tile = grid[y][x];
+      if (tile.wall) {
+        walls.push({ x, y, ...tile.wall });
+      }
+    }
+  }
+  return walls;
 }
 
 function loadWorld(world) {
@@ -58,6 +74,24 @@ function loadWorld(world) {
           world.grid[r.y][r.x].resourceCount = r.count;
         }
       }
+    }
+
+    // Restore walls
+    if (data.walls) {
+      for (const w of data.walls) {
+        if (w.x >= 0 && w.x < GRID_SIZE && w.y >= 0 && w.y < GRID_SIZE) {
+          world.grid[w.y][w.x].wall = {
+            builtBy: w.builtBy,
+            builtTick: w.builtTick,
+            decayTick: w.decayTick
+          };
+        }
+      }
+    }
+
+    // Restore alliances
+    if (data.alliances) {
+      loadAlliances(data.alliances);
     }
 
     // Rebuild tile occupants from agent positions

@@ -129,8 +129,9 @@ const effects = new EffectsManager(scene);
 const ui = new UI();
 
 // --- State ---
-let worldState = { agents: {}, activeTiles: [], tick: 0 };
+let worldState = { agents: {}, activeTiles: [], tick: 0, cycle: null };
 let seenEventIds = new Set();
+let currentCycle = { isNight: false, phase: 'day', ticksRemaining: 60 };
 
 // --- WebSocket ---
 function connectWS() {
@@ -167,6 +168,7 @@ function handleMessage(msg) {
   if (msg.type === 'state') {
     // Full state update
     worldState = msg.data;
+    if (worldState.cycle) updateDayNight(worldState.cycle);
     ui.updateTick(worldState.tick);
     ui.updateLeaderboard(worldState.agents);
     worldRenderer.updateResources(worldState.activeTiles || []);
@@ -187,6 +189,7 @@ function handleMessage(msg) {
   } else if (msg.type === 'tick') {
     const data = msg.data;
     worldState.tick = data.tick;
+    if (data.cycle) updateDayNight(data.cycle);
     ui.updateTick(data.tick);
 
     // Update agents from tick data
@@ -262,6 +265,26 @@ function triggerEffect(event) {
     case 'speak':
       effects.addChatBubble(event.x, event.y, event.message);
       break;
+  }
+}
+
+// --- Day/Night Cycle ---
+function updateDayNight(cycle) {
+  currentCycle = cycle;
+  if (cycle.isNight) {
+    // Night: dim ambient and hemisphere lights
+    ambientLight.intensity = 0.2;
+    hemiLight.intensity = 0.5;
+    dirLight.intensity = 0.4;
+    scene.fog.density = 0.008;
+    scene.background.setHex(0x0a0510);
+  } else {
+    // Day: normal lighting
+    ambientLight.intensity = 0.6;
+    hemiLight.intensity = 1.5;
+    dirLight.intensity = 1.6;
+    scene.fog.density = 0.004;
+    scene.background.setHex(0x241530);
   }
 }
 

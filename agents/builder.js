@@ -27,9 +27,9 @@ function moveToward(current, target) {
 // Resource targets — cycle through different zones
 const TARGETS = [
   { zone: 'forest', x: 5, y: 5, resource: 'wood', gatherCount: 5 },
-  { zone: 'shrine', x: 26, y: 5, resource: 'gold', gatherCount: 3 },
-  { zone: 'arena',  x: 26, y: 15, resource: 'stone', gatherCount: 4 },
-  { zone: 'market', x: 5, y: 15, resource: null, gatherCount: 0 },
+  { zone: 'shrine', x: 31, y: 6, resource: 'gold', gatherCount: 3 },
+  { zone: 'arena',  x: 19, y: 19, resource: 'stone', gatherCount: 4 },
+  { zone: 'market', x: 19, y: 31, resource: null, gatherCount: 0 },
 ];
 
 async function run() {

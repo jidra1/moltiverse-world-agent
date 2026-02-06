@@ -51,6 +51,92 @@ const ZONE_RESOURCE = {
   [TILE_TYPES.SHRINE]: RESOURCE_TYPES.GOLD,
 };
 
+// --- Fog of War ---
+const VISION_RADIUS = 10;
+
+function getVisibleTiles(world, agentId, allyIds) {
+  const viewpoints = [agentId, ...(allyIds || [])];
+  const radius = getEffectiveVision(world);
+  const seen = new Set();
+  const tiles = [];
+
+  for (const vid of viewpoints) {
+    const viewer = world.agents[vid];
+    if (!viewer) continue;
+    for (let dy = -radius; dy <= radius; dy++) {
+      for (let dx = -radius; dx <= radius; dx++) {
+        const x = viewer.x + dx;
+        const y = viewer.y + dy;
+        if (x < 0 || x >= GRID_SIZE || y < 0 || y >= GRID_SIZE) continue;
+        if (Math.abs(dx) + Math.abs(dy) > radius) continue;
+        const key = `${x},${y}`;
+        if (!seen.has(key)) {
+          seen.add(key);
+          tiles.push(world.grid[y][x]);
+        }
+      }
+    }
+  }
+  return tiles;
+}
+
+function getVisibleAgents(world, agentId, allyIds) {
+  const viewpoints = [agentId, ...(allyIds || [])];
+  const radius = getEffectiveVision(world);
+  const visible = {};
+
+  for (const vid of viewpoints) {
+    const viewer = world.agents[vid];
+    if (!viewer) continue;
+    // Always include the viewer
+    visible[viewer.id] = viewer;
+    for (const other of Object.values(world.agents)) {
+      if (visible[other.id]) continue;
+      const dist = Math.abs(other.x - viewer.x) + Math.abs(other.y - viewer.y);
+      if (dist <= radius) {
+        visible[other.id] = other;
+      }
+    }
+  }
+  return visible;
+}
+
+// --- Day/Night Cycle ---
+const DAY_LENGTH = 60;   // ticks
+const NIGHT_LENGTH = 60; // ticks
+const CYCLE_LENGTH = DAY_LENGTH + NIGHT_LENGTH;
+
+function isNight(tick) {
+  return (tick % CYCLE_LENGTH) >= DAY_LENGTH;
+}
+
+function getCycleInfo(tick) {
+  const phase = tick % CYCLE_LENGTH;
+  const night = phase >= DAY_LENGTH;
+  const remaining = night ? CYCLE_LENGTH - phase : DAY_LENGTH - phase;
+  return { isNight: night, phase: night ? 'night' : 'day', ticksRemaining: remaining };
+}
+
+function getEffectiveVision(world) {
+  return isNight(world.tick) ? Math.floor(VISION_RADIUS * 0.5) : VISION_RADIUS;
+}
+
+function getNightDamageMultiplier(world) {
+  return isNight(world.tick) ? 1.2 : 1.0;
+}
+
+function getHpRegenAmount(world) {
+  return isNight(world.tick) ? 2 : 5;
+}
+
+// --- Agent Classes ---
+const AGENT_CLASSES = {
+  warrior:  { damageMultiplier: 1.5, gatherMultiplier: 1, canBuild: false },
+  gatherer: { damageMultiplier: 1,   gatherMultiplier: 2, canBuild: false },
+  builder:  { damageMultiplier: 1,   gatherMultiplier: 1, canBuild: true },
+};
+const DEFAULT_CLASS = 'warrior';
+
 function createWorld() {
   const grid = [];
   for (let y = 0; y < GRID_SIZE; y++) {
@@ -91,15 +177,17 @@ function getTile(world, x, y) {
   return world.grid[y][x];
 }
 
-function createAgent(id) {
+function createAgent(id, agentClass) {
   const spawnX = 31 + Math.floor(Math.random() * 2);
   const spawnY = 31 + Math.floor(Math.random() * 2);
+  const cls = AGENT_CLASSES[agentClass] ? agentClass : DEFAULT_CLASS;
   return {
     id,
     x: spawnX,
     y: spawnY,
     hp: 100,
     maxHp: 100,
+    class: cls,
     inventory: { wood: 0, stone: 0, gold: 0 },
     score: 0,
     kills: 0,
@@ -147,6 +235,10 @@ function logEvent(world, event) {
 
 export {
   GRID_SIZE, TILE_TYPES, RESOURCE_TYPES, ZONES, ZONE_RESOURCE,
+  AGENT_CLASSES, DEFAULT_CLASS,
+  VISION_RADIUS, DAY_LENGTH, NIGHT_LENGTH, CYCLE_LENGTH,
   createWorld, getTileType, getTile, createAgent, addAgent,
-  removeAgentFromTile, moveAgentToTile, inventoryCount, logEvent
+  removeAgentFromTile, moveAgentToTile, inventoryCount, logEvent,
+  getVisibleTiles, getVisibleAgents, getEffectiveVision,
+  isNight, getCycleInfo, getNightDamageMultiplier, getHpRegenAmount
 };

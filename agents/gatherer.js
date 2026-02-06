@@ -18,7 +18,7 @@ async function getMyState() {
 
 // Forest zone target (top-left forest)
 const FOREST = { x: 5, y: 5 };
-const MARKET = { x: 5, y: 15 };
+const MARKET = { x: 19, y: 31 };
 
 function moveToward(current, target) {
   if (current.x < target.x) return 'right';

@@ -1,9 +1,11 @@
 // Combat resolution logic
 
-import { getTile, moveAgentToTile, logEvent } from './world.js';
+import { getTile, moveAgentToTile, inventoryCount, logEvent, AGENT_CLASSES, getNightDamageMultiplier } from './world.js';
+import { areAllied } from './alliance.js';
 
 const SAFE_ZONES = new Set(['spawn', 'market']);
 const ATTACK_COOLDOWN = 2; // ticks
+const ATTACK_SELF_COST = 5; // HP cost to attacker
 
 function resolveCombat(world, attackerId, defenderId) {
   const attacker = world.agents[attackerId];
@@ -15,6 +17,11 @@ function resolveCombat(world, attackerId, defenderId) {
   // Must be on same tile
   if (attacker.x !== defender.x || attacker.y !== defender.y) {
     return { success: false, reason: 'Target not on same tile' };
+  }
+
+  // Alliance check — no friendly fire
+  if (areAllied(attackerId, defenderId)) {
+    return { success: false, reason: 'Cannot attack an alliance member' };
   }
 
   // Safe zone check
@@ -30,12 +37,15 @@ function resolveCombat(world, attackerId, defenderId) {
     return { success: false, reason: `Attack on cooldown (${remaining} tick${remaining > 1 ? 's' : ''} remaining)` };
   }
 
-  // Combat cost — attacker takes 10 HP
-  attacker.hp -= 10;
+  // Combat cost — attacker takes HP
+  attacker.hp -= ATTACK_SELF_COST;
   attacker.lastAttackTick = world.tick;
 
-  // Roll damage 10-30
-  const damage = 10 + Math.floor(Math.random() * 21);
+  // Roll damage 10-30, apply class & night multipliers
+  const baseDamage = 10 + Math.floor(Math.random() * 21);
+  const classMultiplier = (AGENT_CLASSES[attacker.class]?.damageMultiplier) || 1;
+  const nightMultiplier = getNightDamageMultiplier(world);
+  const damage = Math.floor(baseDamage * classMultiplier * nightMultiplier);
   defender.hp -= damage;
 
   const result = {
@@ -85,16 +95,25 @@ function resolveCombat(world, attackerId, defenderId) {
 }
 
 function handleDeath(world, killer, victim) {
-  // Drop 50% of inventory
+  // Drop 100% of inventory, capped by killer's remaining capacity (max 20)
   const loot = {};
+  const killerTotal = inventoryCount(killer);
+  let killerSpace = 20 - killerTotal;
+
   for (const [resource, amount] of Object.entries(victim.inventory)) {
-    const dropped = Math.floor(amount / 2);
-    if (dropped > 0) {
-      loot[resource] = dropped;
-      killer.inventory[resource] = (killer.inventory[resource] || 0) + dropped;
-      victim.inventory[resource] -= dropped;
+    if (amount <= 0) continue;
+    const canTake = Math.min(amount, killerSpace);
+    if (canTake > 0) {
+      loot[resource] = canTake;
+      killer.inventory[resource] = (killer.inventory[resource] || 0) + canTake;
+      killerSpace -= canTake;
     }
+    // Victim loses everything regardless
+    victim.inventory[resource] = 0;
   }
+
+  // Score penalty on death
+  victim.score = Math.max(0, victim.score - 25);
 
   // Respawn victim at spawn zone with 50 HP
   victim.hp = 50;

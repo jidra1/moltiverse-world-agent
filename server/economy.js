@@ -1,9 +1,10 @@
 // Resource spawning and trade logic
 
-import { GRID_SIZE, getTile, logEvent } from './world.js';
+import { GRID_SIZE, getTile, logEvent, AGENT_CLASSES } from './world.js';
 
 const MAX_RESOURCE_PER_TILE = 5;
 const RESOURCE_REGEN_INTERVAL = 10; // ticks
+const RESOURCE_SCORE = { wood: 5, stone: 10, gold: 25 };
 
 function regenerateResources(world) {
   if (world.tick % RESOURCE_REGEN_INTERVAL !== 0) return;
@@ -33,14 +34,19 @@ function gatherResource(world, agentId) {
     return { success: false, reason: 'Inventory full (max 20)' };
   }
 
-  tile.resourceCount--;
-  agent.inventory[tile.resource] = (agent.inventory[tile.resource] || 0) + 1;
-  agent.score += 10;
+  // Gatherer class gathers double
+  const gatherMultiplier = (AGENT_CLASSES[agent.class]?.gatherMultiplier) || 1;
+  const amount = Math.min(gatherMultiplier, tile.resourceCount, 20 - totalItems);
+
+  tile.resourceCount -= amount;
+  agent.inventory[tile.resource] = (agent.inventory[tile.resource] || 0) + amount;
+  agent.score += (RESOURCE_SCORE[tile.resource] || 10) * amount;
 
   logEvent(world, {
     type: 'gather',
     agent: agentId,
     resource: tile.resource,
+    amount,
     x: agent.x,
     y: agent.y
   });
@@ -48,7 +54,7 @@ function gatherResource(world, agentId) {
   return {
     success: true,
     resource: tile.resource,
-    amount: 1,
+    amount,
     inventory: { ...agent.inventory },
     tileRemaining: tile.resourceCount
   };
@@ -64,6 +70,12 @@ function executeTrade(world, agentId, targetId, offer, request) {
   // Must be on same tile
   if (agent.x !== target.x || agent.y !== target.y) {
     return { success: false, reason: 'Target not on same tile' };
+  }
+
+  // Market-only trading
+  const tile = getTile(world, agent.x, agent.y);
+  if (tile.type !== 'market') {
+    return { success: false, reason: 'Trading is only allowed in market zones' };
   }
 
   // Validate offer: { resource: amount }

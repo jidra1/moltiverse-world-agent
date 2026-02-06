@@ -62,10 +62,11 @@ function smoothNoise(x, y) {
 
 export function getTerrainHeight(worldX, worldZ) {
   let h = 0;
-  h += smoothNoise(worldX * 0.12 + 50, worldZ * 0.12 + 50) * 1.5;
-  h += smoothNoise(worldX * 0.3 + 100, worldZ * 0.3 + 100) * 0.5;
-  h += smoothNoise(worldX * 0.7 + 200, worldZ * 0.7 + 200) * 0.2;
-  return h - 0.6; // center around 0
+  h += smoothNoise(worldX * 0.08 + 50, worldZ * 0.08 + 50) * 3.0;   // broad rolling hills
+  h += smoothNoise(worldX * 0.2 + 100, worldZ * 0.2 + 100) * 1.2;   // medium features
+  h += smoothNoise(worldX * 0.5 + 200, worldZ * 0.5 + 200) * 0.4;   // bumps
+  h += smoothNoise(worldX * 1.0 + 300, worldZ * 1.0 + 300) * 0.15;  // fine rocky detail
+  return h - 1.5;
 }
 
 function createTree(scale, foliageMat, rotationY) {
@@ -409,10 +410,104 @@ function getTileType(x, y) {
   return 'spawn';
 }
 
+// Per-zone color palettes — 3 variants each for patchy variety
+const ZONE_PALETTES = {
+  spawn:  [new THREE.Color(0x5a5075), new THREE.Color(0x4e4668), new THREE.Color(0x665a82)],
+  forest: [new THREE.Color(0x3a8a40), new THREE.Color(0x2e7a34), new THREE.Color(0x469a4c)],
+  market: [new THREE.Color(0x8a7a38), new THREE.Color(0x7e6e2c), new THREE.Color(0x968644)],
+  arena:  [new THREE.Color(0x8a3838), new THREE.Color(0x7e2c2c), new THREE.Color(0x964444)],
+  shrine: [new THREE.Color(0x8a7840), new THREE.Color(0x7e6c34), new THREE.Color(0x96844c)],
+};
+
+// Pre-build sample ring: center + 3 rings at increasing radii, distance-weighted
+const _blendSamples = (() => {
+  const samples = [];
+  // Center point — highest weight
+  samples.push({ ox: 0, oz: 0, w: 2.0 });
+  // Ring 1 — radius 3, 8 points
+  for (let a = 0; a < 8; a++) {
+    const angle = a * Math.PI / 4;
+    samples.push({ ox: Math.cos(angle) * 3, oz: Math.sin(angle) * 3, w: 1.2 });
+  }
+  // Ring 2 — radius 6, 8 points
+  for (let a = 0; a < 8; a++) {
+    const angle = (a + 0.5) * Math.PI / 4;
+    samples.push({ ox: Math.cos(angle) * 6, oz: Math.sin(angle) * 6, w: 0.6 });
+  }
+  // Ring 3 — radius 9, 8 points (wide reach for gradual blend)
+  for (let a = 0; a < 8; a++) {
+    const angle = a * Math.PI / 4;
+    samples.push({ ox: Math.cos(angle) * 9, oz: Math.sin(angle) * 9, w: 0.25 });
+  }
+  return samples;
+})();
+
+function getBlendedZoneColor(worldX, worldZ) {
+  const half = GRID_SIZE / 2;
+
+  // Accumulate distance-weighted zone contributions
+  const weights = { spawn: 0, forest: 0, market: 0, arena: 0, shrine: 0 };
+  let totalWeight = 0;
+
+  for (const s of _blendSamples) {
+    // Noise-driven wobble so boundaries become organic curves
+    const wobbleX = smoothNoise(worldX * 0.1 + s.oz * 0.2 + 500, worldZ * 0.1 + s.ox * 0.2 + 500) * 3.0;
+    const wobbleZ = smoothNoise(worldX * 0.1 + s.oz * 0.2 + 600, worldZ * 0.1 + s.ox * 0.2 + 600) * 3.0;
+    const sx = worldX + s.ox + wobbleX;
+    const sz = worldZ + s.oz + wobbleZ;
+    const tileX = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(sx + half)));
+    const tileY = Math.max(0, Math.min(GRID_SIZE - 1, Math.floor(sz + half)));
+    const type = getTileType(tileX, tileY);
+    weights[type] += s.w;
+    totalWeight += s.w;
+  }
+
+  const result = new THREE.Color(0, 0, 0);
+
+  for (const zone in weights) {
+    if (weights[zone] === 0) continue;
+    const w = weights[zone] / totalWeight;
+    // Pick palette variant using noise
+    const palette = ZONE_PALETTES[zone];
+    const variantNoise = smoothNoise(worldX * 0.06 + 700, worldZ * 0.06 + 700);
+    const variantIdx = Math.floor(variantNoise * palette.length) % palette.length;
+    const baseColor = palette[variantIdx];
+    result.r += baseColor.r * w;
+    result.g += baseColor.g * w;
+    result.b += baseColor.b * w;
+  }
+
+  // 3 octaves of brightness noise
+  const bright1 = (smoothNoise(worldX * 0.04 + 800, worldZ * 0.04 + 800) - 0.5) * 0.15;  // +/-7.5%
+  const bright2 = (smoothNoise(worldX * 0.12 + 900, worldZ * 0.12 + 900) - 0.5) * 0.08;   // +/-4%
+  const bright3 = (smoothNoise(worldX * 0.35 + 1000, worldZ * 0.35 + 1000) - 0.5) * 0.05;  // +/-2.5%
+  const brightness = 1 + bright1 + bright2 + bright3;
+
+  result.r *= brightness;
+  result.g *= brightness;
+  result.b *= brightness;
+
+  // Subtle per-channel hue shifts (+/-3%)
+  const hueR = 1 + (smoothNoise(worldX * 0.09 + 1100, worldZ * 0.09 + 1100) - 0.5) * 0.06;
+  const hueG = 1 + (smoothNoise(worldX * 0.09 + 1200, worldZ * 0.09 + 1200) - 0.5) * 0.06;
+  const hueB = 1 + (smoothNoise(worldX * 0.09 + 1300, worldZ * 0.09 + 1300) - 0.5) * 0.06;
+
+  result.r = Math.min(1, Math.max(0, result.r * hueR));
+  result.g = Math.min(1, Math.max(0, result.g * hueG));
+  result.b = Math.min(1, Math.max(0, result.b * hueB));
+
+  return result;
+}
+
+// --- Wall constants ---
+const WALL_GEO = new THREE.BoxGeometry(0.9, 0.6, 0.9);
+const WALL_MAT = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.7, metalness: 0.1 });
+
 export class WorldRenderer {
   constructor(scene) {
     this.scene = scene;
     this.resourceMeshes = new Map(); // key: "x,y" -> mesh
+    this.wallMeshes = new Map(); // key: "x,y" -> mesh
     this.gridGroup = new THREE.Group();
     // Local resource count map — default 3 for resource tiles
     this.resourceCounts = new Map();
@@ -429,7 +524,7 @@ export class WorldRenderer {
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x241530, roughness: 0.95, metalness: 0.0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -2;
+    ground.position.y = -3;
     ground.receiveShadow = true;
     this.gridGroup.add(ground);
 
@@ -466,8 +561,8 @@ export class WorldRenderer {
     // Market bazaar decorations
     this.addMarketDecorations();
 
-    // Zone border lines
-    this.addZoneBorders();
+    // Zone border lines (disabled — blended terrain replaces hard edges)
+    // this.addZoneBorders();
 
     // Zone labels
     this.addZoneLabels();
@@ -477,7 +572,7 @@ export class WorldRenderer {
   }
 
   createTerrain() {
-    const segs = 192;
+    const segs = 256;
     const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE, segs, segs);
     const posAttr = geo.attributes.position;
     const colors = new Float32Array(posAttr.count * 3);
@@ -491,14 +586,8 @@ export class WorldRenderer {
       const h = getTerrainHeight(worldX, worldZ);
       posAttr.setZ(i, h);
 
-      // Tile coords for zone color
-      const tileX = Math.floor(worldX + GRID_SIZE / 2);
-      const tileY = Math.floor(worldZ + GRID_SIZE / 2);
-      const type = getTileType(
-        Math.max(0, Math.min(GRID_SIZE - 1, tileX)),
-        Math.max(0, Math.min(GRID_SIZE - 1, tileY))
-      );
-      const c = new THREE.Color(ZONE_COLORS[type] || 0x222222);
+      // Blended zone color with noise-driven palettes
+      const c = getBlendedZoneColor(worldX, worldZ);
       colors[i * 3] = c.r;
       colors[i * 3 + 1] = c.g;
       colors[i * 3 + 2] = c.b;
@@ -910,7 +999,7 @@ export class WorldRenderer {
       const sprite = new THREE.Sprite(mat);
       const lwx = label.x - GRID_SIZE / 2 + 0.5;
       const lwz = label.y - GRID_SIZE / 2 + 0.5;
-      sprite.position.set(lwx, getTerrainHeight(lwx, lwz) + 1.5, lwz);
+      sprite.position.set(lwx, getTerrainHeight(lwx, lwz) + 2.5, lwz);
       sprite.scale.set(5, 1.25, 1);
       this.gridGroup.add(sprite);
     }
@@ -925,6 +1014,29 @@ export class WorldRenderer {
       }
     }
     this.renderResources();
+    this.renderWalls(activeTiles);
+  }
+
+  renderWalls(activeTiles) {
+    // Clear existing wall meshes
+    for (const [, mesh] of this.wallMeshes) {
+      this.gridGroup.remove(mesh);
+    }
+    this.wallMeshes.clear();
+
+    const half = GRID_SIZE / 2;
+    for (const tile of activeTiles) {
+      if (!tile.wall) continue;
+      const key = `${tile.x},${tile.y}`;
+      const wx = tile.x - half + 0.5;
+      const wz = tile.y - half + 0.5;
+      const wall = new THREE.Mesh(WALL_GEO, WALL_MAT);
+      wall.position.set(wx, getTerrainHeight(wx, wz) + 0.3, wz);
+      wall.castShadow = true;
+      wall.receiveShadow = true;
+      this.gridGroup.add(wall);
+      this.wallMeshes.set(key, wall);
+    }
   }
 
   renderResources() {

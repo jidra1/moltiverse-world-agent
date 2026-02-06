@@ -46,7 +46,7 @@ async function run() {
 
       // If low HP, retreat to spawn area and wait
       if (me.hp < 30) {
-        const spawnCenter = { x: 15, y: 15 };
+        const spawnCenter = { x: 31, y: 31 };
         const dir = moveToward(me, spawnCenter);
         if (dir) {
           await api('POST', '/api/action', { agentId: AGENT_ID, type: 'move', direction: dir });
@@ -68,7 +68,7 @@ async function run() {
 
       if (others.length === 0) {
         // No targets, wander toward arena
-        const arena = { x: 26, y: 15 };
+        const arena = { x: 19, y: 19 };
         const dir = moveToward(me, arena);
         if (dir) {
           await api('POST', '/api/action', { agentId: AGENT_ID, type: 'move', direction: dir });

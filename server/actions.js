@@ -1,6 +1,6 @@
 // Action handlers: enter, move, gather, trade, attack, speak
 
-import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE } from './world.js';
+import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE, AGENT_CLASSES, getHpRegenAmount, getTileType } from './world.js';
 import { resolveCombat } from './combat.js';
 import { gatherResource, executeTrade } from './economy.js';
 import { verifyEntry } from './gate.js';
@@ -12,31 +12,32 @@ const DIRECTIONS = {
   right: { dx: 1,  dy: 0 }
 };
 
-function processAction(world, action) {
+async function processAction(world, action) {
   switch (action.type) {
-    case 'enter':  return handleEnter(world, action);
+    case 'enter':  return await handleEnter(world, action);
     case 'move':   return handleMove(world, action);
     case 'gather': return handleGather(world, action);
     case 'trade':  return handleTrade(world, action);
     case 'attack': return handleAttack(world, action);
     case 'speak':  return handleSpeak(world, action);
+    case 'build':  return handleBuild(world, action);
     default:       return { success: false, reason: `Unknown action: ${action.type}` };
   }
 }
 
-function handleEnter(world, action) {
+async function handleEnter(world, action) {
   const { agentId, proof } = action;
 
   if (world.agents[agentId]) {
     return { success: false, reason: 'Agent already in world' };
   }
 
-  const gateResult = verifyEntry(agentId, proof);
+  const gateResult = await verifyEntry(agentId, proof);
   if (!gateResult.allowed) {
     return { success: false, reason: gateResult.reason };
   }
 
-  const agent = createAgent(agentId);
+  const agent = createAgent(agentId, action.class);
   addAgent(world, agent);
 
   logEvent(world, { type: 'enter', agent: agentId, x: agent.x, y: agent.y });
@@ -62,6 +63,12 @@ function handleMove(world, action) {
 
   if (newX < 0 || newX >= GRID_SIZE || newY < 0 || newY >= GRID_SIZE) {
     return { success: false, reason: 'Out of bounds' };
+  }
+
+  // Wall collision check
+  const targetTile = getTile(world, newX, newY);
+  if (targetTile && targetTile.wall) {
+    return { success: false, reason: 'Path blocked by a wall' };
   }
 
   moveAgentToTile(world, agentId, newX, newY);
@@ -133,23 +140,140 @@ function handleSpeak(world, action) {
   };
 }
 
-function processActionQueue(world) {
+// --- Building ---
+const WALL_COST = { wood: 3, stone: 2 };
+const WALL_DECAY_TICKS = 120;
+
+function handleBuild(world, action) {
+  const { agentId, direction } = action;
+  const agent = world.agents[agentId];
+
+  if (!agent) return { success: false, reason: 'Agent not in world' };
+  if (!agent.alive) return { success: false, reason: 'Agent is dead' };
+
+  // Only builder class can build
+  if (agent.class !== 'builder') {
+    return { success: false, reason: 'Only builder class can place walls' };
+  }
+
+  const dir = DIRECTIONS[direction];
+  if (!dir) return { success: false, reason: `Invalid direction: ${direction}` };
+
+  const targetX = agent.x + dir.dx;
+  const targetY = agent.y + dir.dy;
+
+  if (targetX < 0 || targetX >= GRID_SIZE || targetY < 0 || targetY >= GRID_SIZE) {
+    return { success: false, reason: 'Cannot build out of bounds' };
+  }
+
+  const targetTile = getTile(world, targetX, targetY);
+
+  // Cannot build in spawn zone
+  if (targetTile.type === 'spawn') {
+    return { success: false, reason: 'Cannot build in spawn zone' };
+  }
+
+  // Cannot build on occupied tile or tile with existing wall
+  if (targetTile.wall) {
+    return { success: false, reason: 'There is already a wall here' };
+  }
+
+  if (targetTile.occupants.length > 0) {
+    return { success: false, reason: 'Cannot build on an occupied tile' };
+  }
+
+  // Check resources
+  for (const [resource, amount] of Object.entries(WALL_COST)) {
+    if ((agent.inventory[resource] || 0) < amount) {
+      return { success: false, reason: `Need ${amount} ${resource} to build (have ${agent.inventory[resource] || 0})` };
+    }
+  }
+
+  // Deduct resources
+  for (const [resource, amount] of Object.entries(WALL_COST)) {
+    agent.inventory[resource] -= amount;
+  }
+
+  // Place wall
+  targetTile.wall = {
+    builtBy: agentId,
+    builtTick: world.tick,
+    decayTick: world.tick + WALL_DECAY_TICKS
+  };
+
+  logEvent(world, {
+    type: 'build',
+    agent: agentId,
+    x: targetX,
+    y: targetY,
+    decayTick: targetTile.wall.decayTick
+  });
+
+  return {
+    success: true,
+    wall: { x: targetX, y: targetY, decayTick: targetTile.wall.decayTick },
+    inventory: { ...agent.inventory }
+  };
+}
+
+async function processActionQueue(world) {
   const results = [];
   while (world.actionQueue.length > 0) {
     const action = world.actionQueue.shift();
-    const result = processAction(world, action);
+    const result = await processAction(world, action);
     results.push({ action, result });
   }
   return results;
 }
 
-// Regenerate HP for all agents (5/tick)
+// Regenerate HP for all agents (day: 5/tick, night: 2/tick)
 function regenerateHp(world) {
+  const regenAmount = getHpRegenAmount(world);
   for (const agent of Object.values(world.agents)) {
     if (agent.alive && agent.hp < agent.maxHp) {
-      agent.hp = Math.min(agent.maxHp, agent.hp + 5);
+      agent.hp = Math.min(agent.maxHp, agent.hp + regenAmount);
     }
   }
 }
 
-export { processAction, processActionQueue, regenerateHp };
+// --- Hunger System ---
+const HUNGER_INTERVAL = 10; // every 10 ticks
+const HUNGER_RESOURCES = ['wood', 'stone', 'gold']; // consume priority
+
+function processHunger(world) {
+  if (world.tick % HUNGER_INTERVAL !== 0) return;
+
+  for (const agent of Object.values(world.agents)) {
+    if (!agent.alive) continue;
+
+    let consumed = false;
+    for (const resource of HUNGER_RESOURCES) {
+      if ((agent.inventory[resource] || 0) > 0) {
+        agent.inventory[resource]--;
+        consumed = true;
+        break;
+      }
+    }
+
+    if (!consumed) {
+      // No resources — take HP damage
+      agent.hp -= 5;
+      if (agent.hp <= 0) {
+        agent.hp = 50;
+        agent.alive = true;
+        agent.score = Math.max(0, agent.score - 25);
+        for (const r of Object.keys(agent.inventory)) {
+          agent.inventory[r] = 0;
+        }
+        const spawnX = 31 + Math.floor(Math.random() * 2);
+        const spawnY = 31 + Math.floor(Math.random() * 2);
+        moveAgentToTile(world, agent.id, spawnX, spawnY);
+        logEvent(world, { type: 'hunger_death', agent: agent.id });
+      } else {
+        logEvent(world, { type: 'hunger', agent: agent.id, hp: agent.hp });
+      }
+    }
+  }
+}
+
+export { processAction, processActionQueue, regenerateHp, processHunger };
