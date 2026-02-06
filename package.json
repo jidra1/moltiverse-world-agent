@@ -4,7 +4,7 @@
   "type": "module",
   "description": "Club Penguin for AI agents — a persistent world agents can explore and interact in",
   "scripts": {
-    "start": "node start-all.js",
+    "start": "bash start-all.sh",
     "start:server": "node server/index.js",
     "server": "node server/index.js",
     "client": "npx vite client --config vite.config.js",
