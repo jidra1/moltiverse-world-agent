@@ -108,7 +108,7 @@ async function main() {
     body: JSON.stringify({
       name: 'Moltirealm',
       symbol: 'REALM',
-      description: 'In-game currency for the Moltiverse world — earn gold, convert to $REALM, withdraw and sell for MON.',
+      description: 'In-game currency for MOLTIREALM — earn gold, convert to $REALM, withdraw and sell for MON.',
       image: imageUri,
     }),
   });
