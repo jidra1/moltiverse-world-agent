@@ -478,7 +478,7 @@ function getWorldSnapshot() {
 // --- Start ---
 
 server.listen(PORT, () => {
-  console.log(`Moltiverse server running on http://localhost:${PORT}`);
+  console.log(`MOLTIREALM server running on http://localhost:${PORT}`);
   console.log(`WebSocket at ws://localhost:${PORT}/ws/stream`);
   console.log(`Tick interval: ${TICK_INTERVAL}ms`);
 });
