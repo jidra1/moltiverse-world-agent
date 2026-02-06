@@ -10,32 +10,40 @@ const AGENT_COLORS = [
   0x44ffff, 0xffff44, 0xaa44ff, 0xff8888, 0x88ff88
 ];
 
-function makeLabel() {
+function makeLabel(agentId, agentColor) {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   canvas.width = 256;
-  canvas.height = 64;
+  canvas.height = 80;
+
+  // Agent name (always visible)
+  ctx.font = 'bold 18px monospace';
+  ctx.textAlign = 'center';
+  ctx.fillStyle = 'rgba(0,0,0,0.7)';
+  ctx.fillText(agentId, 129, 21);
+  ctx.fillStyle = agentColor;
+  ctx.fillText(agentId, 128, 20);
 
   // HP bar background
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(44, 24, 168, 14);
+  ctx.fillRect(44, 40, 168, 14);
 
   const texture = new THREE.CanvasTexture(canvas);
-  return { canvas, ctx, texture };
+  return { canvas, ctx, texture, agentId, agentColor };
 }
 
 function updateHpBar(ctx, texture, hp, maxHp) {
   const ratio = Math.max(0, hp / maxHp);
-  // Clear HP bar area
-  ctx.clearRect(44, 24, 168, 14);
+  // Clear HP bar area only (preserve name above)
+  ctx.clearRect(44, 40, 168, 14);
   // Background
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(44, 24, 168, 14);
+  ctx.fillRect(44, 40, 168, 14);
   // HP fill
   const r = Math.round(255 * (1 - ratio));
   const g = Math.round(255 * ratio);
   ctx.fillStyle = `rgb(${r},${g},60)`;
-  ctx.fillRect(46, 26, Math.round(164 * ratio), 10);
+  ctx.fillRect(46, 42, Math.round(164 * ratio), 10);
   texture.needsUpdate = true;
 }
 
@@ -216,13 +224,14 @@ export class AgentRenderer {
         lobster.userData = { agentId: agent.id };
         this.agentGroup.add(lobster);
 
-        // HP bar sprite
-        const { canvas, ctx, texture } = makeLabel();
+        // Name + HP bar sprite
+        const colorHex = this.colorToHex(color);
+        const { canvas, ctx, texture } = makeLabel(agent.id, colorHex);
         updateHpBar(ctx, texture, agent.hp || 100, 100);
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
         const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(worldX, 1.0, worldZ);
-        sprite.scale.set(1.8, 0.45, 1);
+        sprite.position.set(worldX, 1.2, worldZ);
+        sprite.scale.set(2.2, 0.7, 1);
         this.agentGroup.add(sprite);
 
         this.agentMeshes.set(agent.id, {
@@ -303,7 +312,7 @@ export class AgentRenderer {
       // Label follows lobster
       data.sprite.position.x = data.lobster.position.x;
       data.sprite.position.z = data.lobster.position.z;
-      data.sprite.position.y = data.lobster.position.y + 1.0;
+      data.sprite.position.y = data.lobster.position.y + 1.2;
     }
   }
 }
