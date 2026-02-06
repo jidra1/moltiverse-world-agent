@@ -25,9 +25,12 @@ function moveToward(current, target) {
 }
 
 // Resource targets — cycle through different zones
+// Random starting quadrant
+const q = Math.floor(Math.random() * 4);
+const offsets = [[0,0], [40,0], [0,40], [40,40]];
 const TARGETS = [
-  { zone: 'forest', x: 12, y: 50, resource: 'wood', gatherCount: 5 },
-  { zone: 'shrine', x: 31, y: 56, resource: 'gold', gatherCount: 3 },
+  { zone: 'forest', x: 10 + offsets[q][0], y: 10 + offsets[q][1], resource: 'wood', gatherCount: 5 },
+  { zone: 'shrine', x: 20 + offsets[q][0], y: 15 + offsets[q][1], resource: 'gold', gatherCount: 3 },
   { zone: 'arena',  x: 19, y: 19, resource: 'stone', gatherCount: 4 },
   { zone: 'market', x: 19, y: 31, resource: null, gatherCount: 0 },
 ];

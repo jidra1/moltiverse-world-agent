@@ -17,9 +17,16 @@ async function getMyState() {
 }
 
 // Forest zone target (top-left forest)
-// Top-left quadrant
-const FOREST = { x: 8, y: 8 };
-const MARKET = { x: 19, y: 31 };
+// Random quadrant for variety
+const quadrant = Math.floor(Math.random() * 4);
+const FORESTS = [
+  { x: 8, y: 8 },    // top-left
+  { x: 55, y: 8 },   // top-right
+  { x: 8, y: 55 },   // bottom-left
+  { x: 55, y: 55 }   // bottom-right
+];
+const FOREST = FORESTS[quadrant];
+const MARKET = { x: 31, y: 31 };
 
 function moveToward(current, target) {
   if (current.x < target.x) return 'right';

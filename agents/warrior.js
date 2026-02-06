@@ -72,7 +72,12 @@ async function run() {
 
       if (others.length === 0) {
         // No targets, wander toward arena
-        const arena = { x: 50, y: 12 };
+        // Random arena for variety
+        const arenas = [
+          { x: 20, y: 20 }, { x: 44, y: 20 },
+          { x: 20, y: 44 }, { x: 44, y: 44 }
+        ];
+        const arena = arenas[Math.floor(Math.random() * arenas.length)];
         const dir = moveToward(me, arena);
         if (dir) {
           await api('POST', '/api/action', { agentId: AGENT_ID, type: 'move', direction: dir });
