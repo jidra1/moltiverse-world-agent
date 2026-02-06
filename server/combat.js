@@ -2,6 +2,9 @@
 
 import { getTile, moveAgentToTile, logEvent } from './world.js';
 
+const SAFE_ZONES = new Set(['spawn', 'market']);
+const ATTACK_COOLDOWN = 2; // ticks
+
 function resolveCombat(world, attackerId, defenderId) {
   const attacker = world.agents[attackerId];
   const defender = world.agents[defenderId];
@@ -14,6 +17,23 @@ function resolveCombat(world, attackerId, defenderId) {
     return { success: false, reason: 'Target not on same tile' };
   }
 
+  // Safe zone check
+  const tile = getTile(world, attacker.x, attacker.y);
+  if (SAFE_ZONES.has(tile.type)) {
+    return { success: false, reason: `No combat allowed in ${tile.type} zone` };
+  }
+
+  // Attack cooldown check
+  const lastAttack = attacker.lastAttackTick || 0;
+  if (world.tick - lastAttack < ATTACK_COOLDOWN) {
+    const remaining = ATTACK_COOLDOWN - (world.tick - lastAttack);
+    return { success: false, reason: `Attack on cooldown (${remaining} tick${remaining > 1 ? 's' : ''} remaining)` };
+  }
+
+  // Combat cost — attacker takes 10 HP
+  attacker.hp -= 10;
+  attacker.lastAttackTick = world.tick;
+
   // Roll damage 10-30
   const damage = 10 + Math.floor(Math.random() * 21);
   defender.hp -= damage;
@@ -23,6 +43,7 @@ function resolveCombat(world, attackerId, defenderId) {
     attacker: attackerId,
     defender: defenderId,
     damage,
+    attackerHp: attacker.hp,
     defenderHp: defender.hp,
     killed: false,
     loot: null
@@ -36,7 +57,16 @@ function resolveCombat(world, attackerId, defenderId) {
     defenderHp: Math.max(0, defender.hp)
   });
 
-  // Check for death
+  // Check if attacker killed themselves from combat cost
+  if (attacker.hp <= 0) {
+    attacker.hp = 50;
+    attacker.alive = true;
+    const spawnX = 15 + Math.floor(Math.random() * 2);
+    const spawnY = 15 + Math.floor(Math.random() * 2);
+    moveAgentToTile(world, attacker.id, spawnX, spawnY);
+  }
+
+  // Check for defender death
   if (defender.hp <= 0) {
     result.killed = true;
     result.loot = handleDeath(world, attacker, defender);

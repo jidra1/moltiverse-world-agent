@@ -35,7 +35,7 @@ function gatherResource(world, agentId) {
 
   tile.resourceCount--;
   agent.inventory[tile.resource] = (agent.inventory[tile.resource] || 0) + 1;
-  agent.score += 5;
+  agent.score += 10;
 
   logEvent(world, {
     type: 'gather',
@@ -90,8 +90,8 @@ function executeTrade(world, agentId, targetId, offer, request) {
     agent.inventory[resource] = (agent.inventory[resource] || 0) + amount;
   }
 
-  agent.score += 10;
-  target.score += 10;
+  agent.score += 20;
+  target.score += 20;
 
   logEvent(world, {
     type: 'trade',
