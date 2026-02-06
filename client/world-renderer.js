@@ -70,6 +70,37 @@ const GRASS_MATS = [
 ];
 const BLADES_PER_TILE = 5;
 
+// --- Mountain constants ---
+const MOUNTAIN_BASE_GEO = new THREE.ConeGeometry(1.2, 0.9, 6);   // wide squat base
+const MOUNTAIN_PEAK_GEO = new THREE.ConeGeometry(0.5, 0.7, 5);   // narrow peak on top
+const MOUNTAIN_BASE_MAT = new THREE.MeshLambertMaterial({ color: 0x5a5a5a });
+const MOUNTAIN_PEAK_MATS = [
+  new THREE.MeshLambertMaterial({ color: 0x8a8a8a }),
+  new THREE.MeshLambertMaterial({ color: 0x7a6b5a }),
+  new THREE.MeshLambertMaterial({ color: 0x9a9a9a }),
+];
+
+// --- Lake constants ---
+const LAKE_GEO = new THREE.CircleGeometry(0.9, 16);
+const LAKE_MAT = new THREE.MeshLambertMaterial({
+  color: 0x2277aa, transparent: true, opacity: 0.7,
+  emissive: 0x113344, emissiveIntensity: 0.3,
+});
+
+function createMountain(scale, peakMat, rotationY) {
+  const group = new THREE.Group();
+  const base = new THREE.Mesh(MOUNTAIN_BASE_GEO, MOUNTAIN_BASE_MAT);
+  base.position.y = 0.45 * scale;
+  base.scale.setScalar(scale);
+  group.add(base);
+  const peak = new THREE.Mesh(MOUNTAIN_PEAK_GEO, peakMat);
+  peak.position.set(0.1 * scale, 0.85 * scale, 0.05 * scale);
+  peak.scale.setScalar(scale);
+  group.add(peak);
+  group.rotation.y = rotationY;
+  return group;
+}
+
 // Zone definitions matching server
 const ZONES = [
   { type: 'spawn',  x1: 11, y1: 11, x2: 20, y2: 20 },
@@ -139,6 +170,10 @@ export class WorldRenderer {
     // Forest grass
     this.addForestGrass();
 
+    // Forest mountains & lakes
+    this.addForestMountains();
+    this.addForestLakes();
+
     // Zone border lines
     this.addZoneBorders();
 
@@ -174,6 +209,40 @@ export class WorldRenderer {
           blade.rotation.z = (h3 - 0.5) * 0.3;
           this.gridGroup.add(blade);
         }
+      }
+    }
+  }
+
+  addForestMountains() {
+    const half = GRID_SIZE / 2;
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (getTileType(x, y) !== 'forest') continue;
+        if (tileHash(x * 131, y * 197) >= 0.003) continue;
+        const h = tileHash(x * 37, y * 53);
+        const scale = 0.8 + h * 0.5;
+        const rotY = tileHash(x * 41, y * 67) * Math.PI * 2;
+        const peakMat = MOUNTAIN_PEAK_MATS[Math.floor(h * MOUNTAIN_PEAK_MATS.length)];
+        const mountain = createMountain(scale, peakMat, rotY);
+        mountain.position.set(x - half + 0.5, 0, y - half + 0.5);
+        this.gridGroup.add(mountain);
+      }
+    }
+  }
+
+  addForestLakes() {
+    const half = GRID_SIZE / 2;
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (getTileType(x, y) !== 'forest') continue;
+        if (tileHash(x * 163, y * 229) >= 0.002) continue;
+        const h = tileHash(x * 47, y * 61);
+        const scale = 0.8 + h * 0.4;
+        const lake = new THREE.Mesh(LAKE_GEO, LAKE_MAT);
+        lake.rotation.x = -Math.PI / 2;
+        lake.position.set(x - half + 0.5, 0.02, y - half + 0.5);
+        lake.scale.setScalar(scale);
+        this.gridGroup.add(lake);
       }
     }
   }
