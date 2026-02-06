@@ -48,6 +48,13 @@ const app = express();
 app.use(cors());
 app.use(express.json());
 
+// Serve static frontend files in production
+import { fileURLToPath } from 'url';
+import { dirname, join } from 'path';
+const __filename = fileURLToPath(import.meta.url);
+const __dirname = dirname(__filename);
+app.use(express.static(join(__dirname, '../client/dist')));
+
 const server = createServer(app);
 
 // WebSocket setup — Map<ws, {agentId: string|null}> for filtering
