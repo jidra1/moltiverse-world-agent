@@ -10,23 +10,15 @@ const AGENT_COLORS = [
   0x44ffff, 0xffff44, 0xaa44ff, 0xff8888, 0x88ff88
 ];
 
-function makeLabel(text, color) {
+function makeLabel() {
   const canvas = document.createElement('canvas');
   const ctx = canvas.getContext('2d');
   canvas.width = 256;
-  canvas.height = 128;
-
-  // Name text
-  ctx.font = 'bold 28px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillStyle = '#000';
-  ctx.fillText(text, 129, 37);
-  ctx.fillStyle = color;
-  ctx.fillText(text, 128, 36);
+  canvas.height = 64;
 
   // HP bar background
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(44, 56, 168, 14);
+  ctx.fillRect(44, 24, 168, 14);
 
   const texture = new THREE.CanvasTexture(canvas);
   return { canvas, ctx, texture };
@@ -35,20 +27,15 @@ function makeLabel(text, color) {
 function updateHpBar(ctx, texture, hp, maxHp) {
   const ratio = Math.max(0, hp / maxHp);
   // Clear HP bar area
-  ctx.clearRect(44, 56, 168, 14);
+  ctx.clearRect(44, 24, 168, 14);
   // Background
   ctx.fillStyle = 'rgba(0,0,0,0.6)';
-  ctx.fillRect(44, 56, 168, 14);
+  ctx.fillRect(44, 24, 168, 14);
   // HP fill
   const r = Math.round(255 * (1 - ratio));
   const g = Math.round(255 * ratio);
   ctx.fillStyle = `rgb(${r},${g},60)`;
-  ctx.fillRect(46, 58, Math.round(164 * ratio), 10);
-  // HP text
-  ctx.fillStyle = '#fff';
-  ctx.font = '11px monospace';
-  ctx.textAlign = 'center';
-  ctx.fillText(`${hp}`, 128, 68);
+  ctx.fillRect(46, 26, Math.round(164 * ratio), 10);
   texture.needsUpdate = true;
 }
 
@@ -229,13 +216,13 @@ export class AgentRenderer {
         lobster.userData = { agentId: agent.id };
         this.agentGroup.add(lobster);
 
-        // Name label + HP bar sprite
-        const { canvas, ctx, texture } = makeLabel(agent.id, this.colorToHex(color));
+        // HP bar sprite
+        const { canvas, ctx, texture } = makeLabel();
         updateHpBar(ctx, texture, agent.hp || 100, 100);
         const spriteMat = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
         const sprite = new THREE.Sprite(spriteMat);
-        sprite.position.set(worldX, 1.2, worldZ);
-        sprite.scale.set(2.5, 1.25, 1);
+        sprite.position.set(worldX, 1.0, worldZ);
+        sprite.scale.set(1.8, 0.45, 1);
         this.agentGroup.add(sprite);
 
         this.agentMeshes.set(agent.id, {
