@@ -16,12 +16,10 @@ function makeLabel(agentId, agentColor) {
   canvas.width = 256;
   canvas.height = 80;
 
-  // Agent name (always visible)
+  // Agent name (plain white text)
   ctx.font = 'bold 18px monospace';
   ctx.textAlign = 'center';
-  ctx.fillStyle = 'rgba(0,0,0,0.7)';
-  ctx.fillText(agentId, 129, 21);
-  ctx.fillStyle = agentColor;
+  ctx.fillStyle = '#ffffff';
   ctx.fillText(agentId, 128, 20);
 
   // HP bar background
