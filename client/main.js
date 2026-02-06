@@ -36,16 +36,28 @@ controls.maxPolarAngle = Math.PI / 2.2;
 controls.target.set(0, 0, 0);
 
 // Lighting
-const ambientLight = new THREE.AmbientLight(0x404060, 1.5);
+const ambientLight = new THREE.AmbientLight(0x303050, 1.2);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xffeedd, 1.2);
-dirLight.position.set(20, 30, 10);
+const dirLight = new THREE.DirectionalLight(0xddeeff, 0.8);
+dirLight.position.set(20, 40, 15);
 scene.add(dirLight);
 
-const pointLight = new THREE.PointLight(0x6688ff, 0.8, 60);
-pointLight.position.set(0, 15, 0);
-scene.add(pointLight);
+// Subtle colored zone accent lights
+const zoneLights = [
+  { color: 0x44aa55, x: -10, z: -10, intensity: 0.4 },  // forest top-left
+  { color: 0x44aa55, x: -10, z: 10, intensity: 0.4 },   // forest bottom-left
+  { color: 0xccaa33, x: -10, z: 0, intensity: 0.3 },     // market
+  { color: 0xcc4444, x: 10, z: 0, intensity: 0.3 },      // arena
+  { color: 0x4466cc, x: 10, z: -10, intensity: 0.4 },    // shrine top
+  { color: 0x4466cc, x: 10, z: 10, intensity: 0.4 },     // shrine bottom
+  { color: 0x6666aa, x: 0, z: 0, intensity: 0.3 },       // spawn center
+];
+for (const zl of zoneLights) {
+  const light = new THREE.PointLight(zl.color, zl.intensity, 25);
+  light.position.set(zl.x, 3, zl.z);
+  scene.add(light);
+}
 
 // --- Renderers ---
 const worldRenderer = new WorldRenderer(scene);

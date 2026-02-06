@@ -7,11 +7,11 @@ const TILE_SIZE = 1;
 const GAP = 0.05;
 
 const ZONE_COLORS = {
-  spawn:  0x2a2a3a,
-  forest: 0x1a4a1a,
-  market: 0x3a3a1a,
-  arena:  0x4a1a1a,
-  shrine: 0x1a2a4a
+  spawn:  0x1e1e30,
+  forest: 0x153a15,
+  market: 0x2e2a12,
+  arena:  0x3a1515,
+  shrine: 0x151a38
 };
 
 const RESOURCE_COLORS = {
@@ -86,17 +86,44 @@ export class WorldRenderer {
     const borderGeo = new THREE.EdgesGeometry(
       new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE)
     );
-    const borderMat = new THREE.LineBasicMaterial({ color: 0x333355 });
+    const borderMat = new THREE.LineBasicMaterial({ color: 0x222244 });
     const border = new THREE.LineSegments(borderGeo, borderMat);
     border.rotation.x = -Math.PI / 2;
     border.position.y = 0.01;
     this.gridGroup.add(border);
+
+    // Zone border lines
+    this.addZoneBorders();
 
     // Zone labels
     this.addZoneLabels();
 
     // Initial resource rendering
     this.renderResources();
+  }
+
+  addZoneBorders() {
+    const zoneBorderColor = 0x334466;
+    const mat = new THREE.LineBasicMaterial({ color: zoneBorderColor, transparent: true, opacity: 0.5 });
+    const half = GRID_SIZE / 2;
+
+    // Draw lines at zone boundaries: x=11, x=21, y=11, y=21
+    const boundaries = [11, 21];
+    for (const b of boundaries) {
+      // Vertical line (x = b)
+      const vGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(b - half, 0.02, -half),
+        new THREE.Vector3(b - half, 0.02, half)
+      ]);
+      this.gridGroup.add(new THREE.Line(vGeo, mat));
+
+      // Horizontal line (y = b)
+      const hGeo = new THREE.BufferGeometry().setFromPoints([
+        new THREE.Vector3(-half, 0.02, b - half),
+        new THREE.Vector3(half, 0.02, b - half)
+      ]);
+      this.gridGroup.add(new THREE.Line(hGeo, mat));
+    }
   }
 
   addZoneLabels() {

@@ -117,9 +117,15 @@ export class AgentRenderer {
         sprite.scale.set(2.5, 1.25, 1);
         this.agentGroup.add(sprite);
 
+        // Point light under agent for glow effect
+        const light = new THREE.PointLight(color, 1, 3);
+        light.position.set(worldX, 0.2, worldZ);
+        this.agentGroup.add(light);
+
         this.agentMeshes.set(agent.id, {
           sphere,
           sprite,
+          light,
           labelCtx: ctx,
           labelTexture: texture,
           targetPos: new THREE.Vector3(worldX, 0.35, worldZ),
@@ -133,6 +139,8 @@ export class AgentRenderer {
       if (!currentIds.has(id)) {
         this.agentGroup.remove(data.sphere);
         this.agentGroup.remove(data.sprite);
+        this.agentGroup.remove(data.light);
+        data.light.dispose();
         data.labelTexture.dispose();
         data.sprite.material.dispose();
         this.agentMeshes.delete(id);
@@ -149,6 +157,9 @@ export class AgentRenderer {
       data.sprite.position.x = data.sphere.position.x;
       data.sprite.position.z = data.sphere.position.z;
       data.sprite.position.y = data.sphere.position.y + 0.85;
+      // Light follows sphere
+      data.light.position.x = data.sphere.position.x;
+      data.light.position.z = data.sphere.position.z;
     }
   }
 }
