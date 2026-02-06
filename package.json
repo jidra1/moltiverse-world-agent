@@ -1,0 +1,23 @@
+{
+  "name": "moltiverse-world-agent",
+  "version": "1.0.0",
+  "type": "module",
+  "description": "Club Penguin for AI agents — a persistent world agents can explore and interact in",
+  "scripts": {
+    "server": "node server/index.js",
+    "client": "npx vite client --config vite.config.js",
+    "dev": "node server/index.js",
+    "gatherer": "node agents/gatherer.js",
+    "warrior": "node agents/warrior.js",
+    "builder": "node agents/builder.js",
+    "agents": "node agents/gatherer.js & node agents/warrior.js & node agents/builder.js"
+  },
+  "dependencies": {
+    "express": "^4.18.2",
+    "ws": "^8.16.0",
+    "three": "^0.160.0"
+  },
+  "devDependencies": {
+    "vite": "^5.0.10"
+  }
+}
