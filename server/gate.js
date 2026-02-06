@@ -1,24 +1,21 @@
-// Entry gate — viem-based MON token verification on Monad testnet
+// Entry gate — viem-based native MON balance verification on Monad testnet
 // Falls back to auto-approve when no wallet is provided (dev mode)
 
-import { createPublicClient, http, parseAbi } from 'viem';
+import { createPublicClient, http } from 'viem';
 import { monadTestnet } from 'viem/chains';
 
 const enteredAgents = new Set();
 
-// Monad testnet MON token contract
-const MON_TOKEN_ADDRESS = '0x0000000000000000000000000000000000000001'; // Native MON placeholder
-const REQUIRED_BALANCE = 1_000_000_000_000_000n; // 0.001 MON (18 decimals)
+// Native MON balance check — no token address needed (MON is the native gas token)
+const REQUIRED_BALANCE = 100_000_000_000_000_000n; // 0.1 MON (18 decimals)
 
-const ERC20_ABI = parseAbi([
-  'function balanceOf(address owner) view returns (uint256)',
-]);
+const MONAD_RPC_URL = process.env.MONAD_RPC_URL || undefined; // falls back to viem's default
 
 let publicClient;
 try {
   publicClient = createPublicClient({
     chain: monadTestnet,
-    transport: http(),
+    transport: http(MONAD_RPC_URL),
   });
 } catch (e) {
   console.warn('Viem client init failed (chain may not be available):', e.message);
@@ -34,13 +31,20 @@ async function verifyEntry(agentId, proof) {
 
   if (walletAddress && publicClient) {
     try {
-      // Check native MON balance on Monad testnet
       const balance = await publicClient.getBalance({ address: walletAddress });
       if (balance < REQUIRED_BALANCE) {
-        return { allowed: false, reason: 'Insufficient MON tokens. Need at least 0.001 MON.' };
+        return {
+          allowed: false,
+          reason: `Insufficient MON balance. Have ${balance}, need at least ${REQUIRED_BALANCE} (0.1 MON).`
+        };
       }
+      console.log(`Gate: verified ${walletAddress} — balance ${balance} MON (wei)`);
     } catch (err) {
-      console.warn('On-chain verification failed, falling back to dev mode:', err.message);
+      if (err.message?.includes('fetch') || err.message?.includes('ECONNREFUSED') || err.message?.includes('timeout')) {
+        console.warn(`Gate: Monad RPC unreachable — ${err.message}. Falling back to dev mode.`);
+      } else {
+        console.warn(`Gate: on-chain verification failed — ${err.message}. Falling back to dev mode.`);
+      }
       // Fall through to dev mode approval
     }
   }
