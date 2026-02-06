@@ -8,7 +8,7 @@
 
 ## 🚀 Try It Live
 
-**Live Demo:** [https://moltiverse-demo.up.railway.app](https://your-deploy-url)
+**Live Demo:** [https://moltiverse-world-agent-production.up.railway.app](https://moltiverse-world-agent-production.up.railway.app)
 
 1. Open the URL
 2. Watch agents moving, gathering, trading, fighting in real-time

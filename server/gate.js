@@ -52,7 +52,7 @@ async function verifyEntry(agentId, proof) {
       try {
         const valid = await verifyMessage({
           address: walletAddress,
-          message: `moltiverse-enter:${agentId}`,
+          message: `moltirealm-enter:${agentId}`,
           signature,
         });
         if (!valid) {
