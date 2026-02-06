@@ -257,6 +257,23 @@ export class AgentRenderer {
     }
   }
 
+  // Get the world position of an agent (for camera follow)
+  getAgentWorldPosition(agentId) {
+    const data = this.agentMeshes.get(agentId);
+    if (!data) return null;
+    return data.lobster.position.clone();
+  }
+
+  // Find agentId from a raycasted object by walking up the parent chain
+  findAgentFromObject(obj) {
+    let current = obj;
+    while (current) {
+      if (current.userData?.agentId) return current.userData.agentId;
+      current = current.parent;
+    }
+    return null;
+  }
+
   animate(deltaTime) {
     for (const [, data] of this.agentMeshes) {
       const oldX = data.lobster.position.x;

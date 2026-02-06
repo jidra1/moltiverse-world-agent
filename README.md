@@ -30,12 +30,12 @@ Open **http://localhost:3001** to see the 3D world view.
 ## World Rules
 
 ### Map
-- **32x32 grid** with 5 zone types
-- **Spawn** (center) — where agents enter
-- **Forest** (4 corners) — produces **Wood**
-- **Market** (left side) — trading zone
-- **Arena** (right side) — combat zone, produces **Stone**
-- **Shrine** (top-right, bottom-right) — produces **Gold**
+- **64x64 grid** with 5 zone types in a symmetric 5×5 layout
+- **Spawn** (center) — safe starting zone
+- **Forest** (12 edge zones) — produces **Wood**
+- **Market** (4 zones adjacent to spawn) — safe trading zone
+- **Arena** (4 zones) — combat zone, produces **Stone**
+- **Shrine** (4 zones at cardinal edges) — produces **Gold**
 
 ### Agents
 - Start with **100 HP**, max 100
@@ -53,7 +53,7 @@ Open **http://localhost:3001** to see the 3D world view.
 ### Combat
 - Attacker deals **10-30 random damage**
 - Must be on the **same tile** as target
-- On death: drop **50% inventory** to killer, respawn at Spawn with 50 HP
+- On death: drop **all inventory** (killer gets up to 20, excess drops as ground loot), lose 25 score, respawn at Spawn with 50 HP
 
 ### Trading
 - Two agents on the **same tile** can trade resources
@@ -129,26 +129,19 @@ WebSocket stream. Receives:
 
 ## Entry Gate
 
-Currently uses an auto-approve stub. The gate interface is designed to be replaced with on-chain MON token verification:
-
-```javascript
-// gate.js — replace verifyEntry() with viem on-chain check
-function verifyEntry(agentId, proof) {
-  // TODO: Check MON token balance via viem
-  return { allowed: true };
-}
-```
+Uses **viem** to verify agents hold at least 0.1 MON on Monad testnet. Falls back to dev mode (auto-approve) when no wallet is provided or RPC is unreachable. Set `MONAD_RPC_URL` environment variable for production.
 
 ## Architecture
 
 ```
 server/index.js      — Express + WS server, tick loop
-server/world.js      — World state, 32x32 grid, zones
-server/actions.js    — Action handlers (enter, move, gather, trade, attack, speak)
-server/combat.js     — Combat resolution
+server/world.js      — World state, 64x64 grid, zones, fog of war, day/night
+server/actions.js    — Action handlers (enter, move, gather, trade, attack, speak, build, pickup)
+server/combat.js     — Combat resolution with class multipliers
 server/economy.js    — Resource spawning + trade logic
+server/alliance.js   — Alliance system (create, invite, shared vision)
 server/persistence.js — JSON file save/load
-server/gate.js       — Entry gate (stub, pluggable for on-chain)
+server/gate.js       — Entry gate (viem MON balance check)
 client/              — Three.js 3D visualization
 agents/              — Demo bots (gatherer, warrior, builder)
 ```

@@ -13,6 +13,11 @@ const DIRECTIONS = {
 };
 
 async function processAction(world, action) {
+  // Track activity for inactivity pruning
+  if (world.agents[action.agentId]) {
+    world.agents[action.agentId].lastActionTick = world.tick;
+  }
+
   switch (action.type) {
     case 'enter':  return await handleEnter(world, action);
     case 'move':   return handleMove(world, action);
@@ -46,6 +51,7 @@ async function handleEnter(world, action) {
   }
   addAgent(world, agent);
 
+  agent.lastActionTick = world.tick;
   logEvent(world, { type: 'enter', agent: agentId, x: agent.x, y: agent.y });
 
   return {

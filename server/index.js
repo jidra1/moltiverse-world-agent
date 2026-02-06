@@ -4,7 +4,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
-import { GRID_SIZE, createWorld, getVisibleTiles, getVisibleAgents, getCycleInfo, getEffectiveVision } from './world.js';
+import { GRID_SIZE, createWorld, getVisibleTiles, getVisibleAgents, getCycleInfo, getEffectiveVision, removeAgent, logEvent } from './world.js';
 import {
   createAlliance, inviteToAlliance, acceptInvite, leaveAlliance,
   getAlliance, getAllianceLeaderboard, getAllianceMembers,
@@ -13,13 +13,14 @@ import {
 import { processActionQueue, regenerateHp, processHunger } from './actions.js';
 import { regenerateResources, cleanExpiredTrades, getPendingTrade } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
-import { loadEnteredAgents } from './gate.js';
+import { loadEnteredAgents, removeEnteredAgent } from './gate.js';
 
 const AGENT_INSTRUCTIONS = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
 
 const PORT = process.env.PORT || 3000;
 const TICK_INTERVAL = 5000; // 5 seconds
 const ACTION_COOLDOWN_MS = 1000; // Rate limit: 1 action per second per agent
+const INACTIVE_TICKS = 120; // Prune agents after 120 ticks (~10 min) of inactivity
 const agentLastAction = new Map(); // agentId -> timestamp
 
 // Initialize world
@@ -253,6 +254,9 @@ async function tick() {
   // Decay walls
   decayWalls(world);
 
+  // Prune inactive agents
+  pruneInactiveAgents(world);
+
   // Save state
   saveWorld(world);
 
@@ -286,6 +290,20 @@ async function tick() {
     } else {
       // Spectator: full state
       ws.send(JSON.stringify({ type: 'tick', data: tickData }));
+    }
+  }
+}
+
+// --- Inactive Agent Pruning ---
+function pruneInactiveAgents(world) {
+  if (world.tick < INACTIVE_TICKS) return; // skip early ticks
+  const threshold = world.tick - INACTIVE_TICKS;
+  for (const agent of Object.values(world.agents)) {
+    if ((agent.lastActionTick || 0) < threshold) {
+      logEvent(world, { type: 'pruned', agent: agent.id });
+      removeAgent(world, agent.id);
+      agentLastAction.delete(agent.id);
+      removeEnteredAgent(agent.id);
     }
   }
 }

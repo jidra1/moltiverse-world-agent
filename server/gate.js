@@ -64,4 +64,8 @@ function loadEnteredAgents(agentIds) {
   }
 }
 
-export { verifyEntry, resetGate, loadEnteredAgents };
+function removeEnteredAgent(agentId) {
+  enteredAgents.delete(agentId);
+}
+
+export { verifyEntry, resetGate, loadEnteredAgents, removeEnteredAgent };

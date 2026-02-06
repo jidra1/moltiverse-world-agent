@@ -10,6 +10,7 @@ import { WorldRenderer } from './world-renderer.js';
 import { AgentRenderer } from './agent-renderer.js';
 import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
+import { SoundManager } from './sounds.js';
 
 // --- Scene Setup ---
 const GRID_SIZE = 64;
@@ -55,6 +56,10 @@ window.addEventListener('keydown', (e) => {
   if (['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
     keysDown.add(e.key);
     e.preventDefault();
+  }
+  if (e.key === 'Escape' && followAgentId) {
+    followAgentId = null;
+    ui.setFollowTarget(null);
   }
 });
 window.addEventListener('keyup', (e) => keysDown.delete(e.key));
@@ -127,11 +132,19 @@ worldRenderer.buildGrid();
 const agentRenderer = new AgentRenderer(scene);
 const effects = new EffectsManager(scene);
 const ui = new UI();
+const sounds = new SoundManager();
+
+// Sound toggle button
+document.getElementById('sound-toggle').addEventListener('click', () => {
+  const muted = sounds.toggleMute();
+  document.getElementById('sound-toggle').textContent = muted ? '♪̶' : '♪';
+});
 
 // --- State ---
 let worldState = { agents: {}, activeTiles: [], tick: 0, cycle: null };
 let seenEventIds = new Set();
 let currentCycle = { isNight: false, phase: 'day', ticksRemaining: 60 };
+let followAgentId = null;
 
 // --- WebSocket ---
 function connectWS() {
@@ -248,22 +261,30 @@ function triggerEffect(event) {
   switch (event.type) {
     case 'enter':
       effects.addEnterGlow(event.x, event.y);
+      sounds.playEnter();
       break;
     case 'gather':
       effects.addGatherSparkle(event.x, event.y, event.resource);
+      sounds.playGather(event.resource);
       break;
     case 'combat': {
       const defender = worldState.agents?.[event.defender];
       if (defender) effects.addCombatFlash(defender.x, defender.y);
+      sounds.playHit();
       break;
     }
     case 'kill': {
       const victim = worldState.agents?.[event.victim];
       if (victim) effects.addKillExplosion(victim.x, victim.y);
+      sounds.playKill();
       break;
     }
     case 'speak':
       effects.addChatBubble(event.x, event.y, event.message);
+      sounds.playSpeak();
+      break;
+    case 'trade':
+      sounds.playTrade();
       break;
   }
 }
@@ -291,6 +312,38 @@ function updateDayNight(cycle) {
 // --- Mouse interaction ---
 const raycaster = new THREE.Raycaster();
 const mouse = new THREE.Vector2();
+
+// Click to follow an agent
+renderer.domElement.addEventListener('click', (event) => {
+  const clickMouse = new THREE.Vector2(
+    (event.clientX / canvasWidth()) * 2 - 1,
+    -(event.clientY / canvasHeight()) * 2 + 1
+  );
+  raycaster.setFromCamera(clickMouse, camera);
+  const hits = raycaster.intersectObjects(agentRenderer.agentGroup.children, true);
+  if (hits.length > 0) {
+    const agentId = agentRenderer.findAgentFromObject(hits[0].object);
+    if (agentId) {
+      followAgentId = agentId;
+      ui.setFollowTarget(agentId);
+      return;
+    }
+  }
+  // Clicked empty space — stop following
+  if (followAgentId) {
+    followAgentId = null;
+    ui.setFollowTarget(null);
+  }
+});
+
+// Leaderboard click to follow
+document.getElementById('leaderboard-entries').addEventListener('click', (event) => {
+  const entry = event.target.closest('.lb-entry');
+  if (entry?.dataset?.agentId) {
+    followAgentId = entry.dataset.agentId;
+    ui.setFollowTarget(followAgentId);
+  }
+});
 
 renderer.domElement.addEventListener('mousemove', (event) => {
   mouse.x = (event.clientX / canvasWidth()) * 2 - 1;
@@ -360,6 +413,20 @@ function animate() {
       move.normalize().multiplyScalar(speed);
       controls.target.add(move);
       camera.position.add(move);
+    }
+  }
+
+  // Camera follow mode — smoothly track the followed agent
+  if (followAgentId) {
+    const pos = agentRenderer.getAgentWorldPosition(followAgentId);
+    if (pos) {
+      const offset = camera.position.clone().sub(controls.target);
+      controls.target.lerp(pos, 0.08);
+      camera.position.copy(controls.target).add(offset);
+    } else {
+      // Agent gone — stop following
+      followAgentId = null;
+      ui.setFollowTarget(null);
     }
   }
 

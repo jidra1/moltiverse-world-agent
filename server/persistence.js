@@ -125,6 +125,11 @@ function loadWorld(world) {
         agent.class = DEFAULT_CLASS;
       }
 
+      // Default lastActionTick for agents saved before pruning was added
+      if (agent.lastActionTick == null) {
+        agent.lastActionTick = data.tick || 0;
+      }
+
       // Floor negative inventory values to 0
       for (const resource of Object.keys(agent.inventory)) {
         if (agent.inventory[resource] < 0) {

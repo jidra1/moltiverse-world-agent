@@ -47,12 +47,24 @@ export class UI {
 
     this.leaderboardEl.innerHTML = sorted.map(a => {
       const total = Object.values(a.inventory || {}).reduce((s, v) => s + v, 0);
-      return `<div class="lb-entry">
+      return `<div class="lb-entry" data-agent-id="${escapeHtml(a.id)}" style="cursor:pointer">
         <span class="name">${escapeHtml(a.id)}</span>
         <span class="score">${a.score}pts</span>
         <span class="stats">HP:${a.hp} K:${a.kills} R:${total}</span>
       </div>`;
     }).join('');
+  }
+
+  // Camera follow indicator
+  setFollowTarget(agentId) {
+    const el = document.getElementById('follow-indicator');
+    const nameEl = document.getElementById('follow-name');
+    if (agentId) {
+      nameEl.textContent = agentId;
+      el.style.display = 'block';
+    } else {
+      el.style.display = 'none';
+    }
   }
 
   addLogEntry(event) {
@@ -101,6 +113,8 @@ function formatEvent(event) {
       return `<b>${esc(event.killer)}</b> killed <b>${esc(event.victim)}</b>!`;
     case 'speak':
       return `<b>${esc(event.agent)}</b>: "${esc(event.message)}"`;
+    case 'pruned':
+      return `<b>${esc(event.agent)}</b> was pruned (inactive)`;
     default:
       return JSON.stringify(event);
   }

@@ -196,7 +196,8 @@ function createAgent(id, agentClass) {
     score: 0,
     kills: 0,
     alive: true,
-    enteredAt: Date.now()
+    enteredAt: Date.now(),
+    lastActionTick: 0
   };
 }
 
@@ -211,6 +212,13 @@ function removeAgentFromTile(world, agentId, x, y) {
   if (tile) {
     tile.occupants = tile.occupants.filter(id => id !== agentId);
   }
+}
+
+function removeAgent(world, agentId) {
+  const agent = world.agents[agentId];
+  if (!agent) return;
+  removeAgentFromTile(world, agentId, agent.x, agent.y);
+  delete world.agents[agentId];
 }
 
 function moveAgentToTile(world, agentId, newX, newY) {
@@ -242,7 +250,7 @@ export {
   AGENT_CLASSES, DEFAULT_CLASS,
   VISION_RADIUS, DAY_LENGTH, NIGHT_LENGTH, CYCLE_LENGTH,
   createWorld, getTileType, getTile, createAgent, addAgent,
-  removeAgentFromTile, moveAgentToTile, inventoryCount, logEvent,
+  removeAgent, removeAgentFromTile, moveAgentToTile, inventoryCount, logEvent,
   getVisibleTiles, getVisibleAgents, getEffectiveVision,
   isNight, getCycleInfo, getNightDamageMultiplier, getHpRegenAmount
 };
