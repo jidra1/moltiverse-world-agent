@@ -12,6 +12,7 @@ function resolveCombat(world, attackerId, defenderId) {
   const defender = world.agents[defenderId];
 
   if (!attacker || !defender) return { success: false, reason: 'Agent not found' };
+  if (attackerId === defenderId) return { success: false, reason: 'Cannot attack yourself' };
   if (!attacker.alive || !defender.alive) return { success: false, reason: 'Agent is dead' };
 
   // Must be on same tile
@@ -96,20 +97,33 @@ function resolveCombat(world, attackerId, defenderId) {
 
 function handleDeath(world, killer, victim) {
   // Drop 100% of inventory, capped by killer's remaining capacity (max 20)
+  // Overflow goes to tile as ground loot
   const loot = {};
+  const dropped = {};
   const killerTotal = inventoryCount(killer);
   let killerSpace = 20 - killerTotal;
+  const tile = getTile(world, victim.x, victim.y);
 
   for (const [resource, amount] of Object.entries(victim.inventory)) {
     if (amount <= 0) continue;
     const canTake = Math.min(amount, killerSpace);
+    const overflow = amount - canTake;
     if (canTake > 0) {
       loot[resource] = canTake;
       killer.inventory[resource] = (killer.inventory[resource] || 0) + canTake;
       killerSpace -= canTake;
     }
+    if (overflow > 0 && tile) {
+      if (!tile.droppedLoot) tile.droppedLoot = {};
+      tile.droppedLoot[resource] = (tile.droppedLoot[resource] || 0) + overflow;
+      dropped[resource] = overflow;
+    }
     // Victim loses everything regardless
     victim.inventory[resource] = 0;
+  }
+
+  if (Object.keys(dropped).length > 0) {
+    logEvent(world, { type: 'loot_drop', x: victim.x, y: victim.y, loot: dropped });
   }
 
   // Score penalty on death

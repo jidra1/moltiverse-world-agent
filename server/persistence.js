@@ -1,8 +1,10 @@
 // JSON file persistence — save/load world state
 
 import { readFileSync, writeFileSync, existsSync } from 'fs';
-import { GRID_SIZE } from './world.js';
+import { GRID_SIZE, DEFAULT_CLASS, AGENT_CLASSES } from './world.js';
 import { serializeAlliances, loadAlliances } from './alliance.js';
+
+const INVENTORY_CAP = 20;
 
 const STATE_FILE = 'world-state.json';
 
@@ -15,6 +17,7 @@ function saveWorld(world) {
     // Save resource counts per tile (not full grid to save space)
     resources: serializeResources(world.grid),
     walls: serializeWalls(world.grid),
+    droppedLoot: serializeDroppedLoot(world.grid),
     alliances: serializeAlliances()
   };
 
@@ -50,6 +53,19 @@ function serializeWalls(grid) {
     }
   }
   return walls;
+}
+
+function serializeDroppedLoot(grid) {
+  const loot = [];
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
+      const tile = grid[y][x];
+      if (tile.droppedLoot && Object.keys(tile.droppedLoot).length > 0) {
+        loot.push({ x, y, loot: tile.droppedLoot });
+      }
+    }
+  }
+  return loot;
 }
 
 function loadWorld(world) {
@@ -89,9 +105,40 @@ function loadWorld(world) {
       }
     }
 
+    // Restore dropped loot
+    if (data.droppedLoot) {
+      for (const dl of data.droppedLoot) {
+        if (dl.x >= 0 && dl.x < GRID_SIZE && dl.y >= 0 && dl.y < GRID_SIZE) {
+          world.grid[dl.y][dl.x].droppedLoot = dl.loot;
+        }
+      }
+    }
+
     // Restore alliances
     if (data.alliances) {
       loadAlliances(data.alliances);
+    }
+
+    // Fix up agents: default missing class, clamp inventory
+    for (const agent of Object.values(world.agents)) {
+      // Bug #8: default missing class
+      if (!agent.class || !AGENT_CLASSES[agent.class]) {
+        agent.class = DEFAULT_CLASS;
+      }
+
+      // Bug #7: clamp inventory to cap
+      const total = Object.values(agent.inventory).reduce((a, b) => a + b, 0);
+      if (total > INVENTORY_CAP) {
+        let excess = total - INVENTORY_CAP;
+        // Remove excess starting from least valuable (wood, stone, gold)
+        for (const resource of ['wood', 'stone', 'gold']) {
+          if (excess <= 0) break;
+          const have = agent.inventory[resource] || 0;
+          const remove = Math.min(have, excess);
+          agent.inventory[resource] -= remove;
+          excess -= remove;
+        }
+      }
     }
 
     // Rebuild tile occupants from agent positions

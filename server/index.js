@@ -11,7 +11,7 @@ import {
   serializeAlliances, loadAlliances
 } from './alliance.js';
 import { processActionQueue, regenerateHp, processHunger } from './actions.js';
-import { regenerateResources } from './economy.js';
+import { regenerateResources, cleanExpiredTrades, getPendingTrade } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
 import { loadEnteredAgents } from './gate.js';
 
@@ -60,10 +60,14 @@ wss.on('connection', (ws) => {
 
 // --- REST API ---
 
+// Validate agentId format: 1-40 chars, alphanumeric + dashes only
+const AGENT_ID_RE = /^[a-zA-Z0-9][a-zA-Z0-9-]{0,39}$/;
+
 // Enter the world
 app.post('/api/enter', async (req, res) => {
   const { agentId, proof } = req.body;
   if (!agentId) return res.status(400).json({ error: 'agentId required' });
+  if (!AGENT_ID_RE.test(agentId)) return res.status(400).json({ error: 'Invalid agentId: must be 1-40 alphanumeric/dash characters, starting with alphanumeric' });
 
   world.actionQueue.push({ type: 'enter', agentId, proof: proof || {}, class: req.body.class });
   // Process immediately for enter actions
@@ -86,11 +90,12 @@ app.get('/api/state', (req, res) => {
     const visibleTiles = getVisibleTiles(world, agentId, allyIds);
     const visibleAgents = getVisibleAgents(world, agentId, allyIds);
     const tiles = visibleTiles
-      .filter(t => t.occupants.length > 0 || (t.resource && t.resourceCount !== 3))
+      .filter(t => t.occupants.length > 0 || (t.resource && t.resourceCount !== 3) || (t.droppedLoot && Object.keys(t.droppedLoot).length > 0))
       .map(t => ({
         x: t.x, y: t.y, type: t.type,
         resource: t.resource, resourceCount: t.resourceCount,
-        occupants: t.occupants, wall: t.wall || null
+        occupants: t.occupants, wall: t.wall || null,
+        droppedLoot: (t.droppedLoot && Object.keys(t.droppedLoot).length > 0) ? t.droppedLoot : undefined
       }));
     res.json({
       tick: world.tick,
@@ -116,11 +121,13 @@ app.get('/api/agent/:id', (req, res) => {
   const nearbyAgents = Object.values(visibleAgents)
     .filter(a => a.id !== agent.id)
     .map(a => ({ id: a.id, x: a.x, y: a.y, hp: a.hp, alive: a.alive, class: a.class }));
+  const pending = getPendingTrade(agent.id);
   res.json({
     ...agent,
     tile: tile
-      ? { type: tile.type, resource: tile.resource, resourceCount: tile.resourceCount, wall: tile.wall || null }
+      ? { type: tile.type, resource: tile.resource, resourceCount: tile.resourceCount, droppedLoot: tile.droppedLoot || {}, wall: tile.wall || null }
       : null,
+    pendingTrade: pending ? { from: pending.from, offer: pending.offer, request: pending.request } : null,
     nearbyAgents,
     cycle: getCycleInfo(world.tick)
   });
@@ -240,6 +247,9 @@ async function tick() {
   // Regenerate resources
   regenerateResources(world);
 
+  // Clean expired trade proposals
+  cleanExpiredTrades(world.tick);
+
   // Decay walls
   decayWalls(world);
 
@@ -302,23 +312,31 @@ function getWorldSnapshot() {
   for (let y = 0; y < GRID_SIZE; y++) {
     for (let x = 0; x < GRID_SIZE; x++) {
       const t = world.grid[y][x];
-      if (t.occupants.length > 0 || (t.resource && t.resourceCount !== 3) || t.wall) {
+      const hasLoot = t.droppedLoot && Object.keys(t.droppedLoot).length > 0;
+      if (t.occupants.length > 0 || (t.resource && t.resourceCount !== 3) || t.wall || hasLoot) {
         tiles.push({
           x, y,
           type: t.type,
           resource: t.resource,
           resourceCount: t.resourceCount,
           occupants: t.occupants,
-          wall: t.wall || null
+          wall: t.wall || null,
+          droppedLoot: hasLoot ? t.droppedLoot : undefined
         });
       }
     }
   }
 
+  // Spectator view: strip sensitive agent data (HP, inventory, kills)
+  const publicAgents = {};
+  for (const [id, a] of Object.entries(world.agents)) {
+    publicAgents[id] = { id: a.id, x: a.x, y: a.y, score: a.score, class: a.class, alive: a.alive };
+  }
+
   return {
     tick: world.tick,
     gridSize: GRID_SIZE,
-    agents: world.agents,
+    agents: publicAgents,
     activeTiles: tiles,
     events: world.eventLog.slice(-20),
     cycle: getCycleInfo(world.tick)

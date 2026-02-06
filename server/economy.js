@@ -6,6 +6,11 @@ const MAX_RESOURCE_PER_TILE = 5;
 const RESOURCE_REGEN_INTERVAL = 10; // ticks
 const RESOURCE_SCORE = { wood: 5, stone: 10, gold: 25 };
 
+// --- Pending Trades ---
+// Key: targetId, Value: { from, targetId, offer, request, tick }
+const pendingTrades = new Map();
+const TRADE_EXPIRY_TICKS = 30;
+
 function regenerateResources(world) {
   if (world.tick % RESOURCE_REGEN_INTERVAL !== 0) return;
 
@@ -60,12 +65,35 @@ function gatherResource(world, agentId) {
   };
 }
 
-function executeTrade(world, agentId, targetId, offer, request) {
+function validateTradeAmounts(items) {
+  for (const [resource, amount] of Object.entries(items)) {
+    if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0) {
+      return `Invalid amount for ${resource}: must be a non-negative integer`;
+    }
+  }
+  return null;
+}
+
+function proposeTrade(world, agentId, targetId, offer, request) {
   const agent = world.agents[agentId];
   const target = world.agents[targetId];
 
   if (!agent || !target) return { success: false, reason: 'Agent not found' };
   if (!agent.alive || !target.alive) return { success: false, reason: 'Agent is dead' };
+  if (agentId === targetId) return { success: false, reason: 'Cannot trade with yourself' };
+
+  // Reject empty trades (both sides zero/empty)
+  const offerTotal = Object.values(offer).reduce((a, b) => a + b, 0);
+  const requestTotal = Object.values(request).reduce((a, b) => a + b, 0);
+  if (offerTotal === 0 && requestTotal === 0) {
+    return { success: false, reason: 'Trade must include at least one resource' };
+  }
+
+  // Validate amounts are non-negative integers
+  const offerErr = validateTradeAmounts(offer);
+  if (offerErr) return { success: false, reason: offerErr };
+  const requestErr = validateTradeAmounts(request);
+  if (requestErr) return { success: false, reason: requestErr };
 
   // Must be on same tile
   if (agent.x !== target.x || agent.y !== target.y) {
@@ -85,19 +113,76 @@ function executeTrade(world, agentId, targetId, offer, request) {
     }
   }
 
-  // Validate request: { resource: amount }
-  for (const [resource, amount] of Object.entries(request)) {
+  // Store pending trade (overwrites any existing proposal to same target)
+  pendingTrades.set(targetId, { from: agentId, targetId, offer, request, tick: world.tick });
+
+  logEvent(world, {
+    type: 'trade_proposed',
+    agent: agentId,
+    target: targetId,
+    offer,
+    request
+  });
+
+  return { success: true, status: 'proposed', targetId };
+}
+
+function acceptTrade(world, targetId) {
+  const pending = pendingTrades.get(targetId);
+  if (!pending) return { success: false, reason: 'No pending trade for you' };
+
+  const agent = world.agents[pending.from];
+  const target = world.agents[targetId];
+
+  if (!agent || !target) { pendingTrades.delete(targetId); return { success: false, reason: 'Agent not found' }; }
+  if (!agent.alive || !target.alive) { pendingTrades.delete(targetId); return { success: false, reason: 'Agent is dead' }; }
+
+  // Re-validate same tile + market
+  if (agent.x !== target.x || agent.y !== target.y) {
+    pendingTrades.delete(targetId);
+    return { success: false, reason: 'Proposer no longer on same tile' };
+  }
+  const tile = getTile(world, agent.x, agent.y);
+  if (tile.type !== 'market') {
+    pendingTrades.delete(targetId);
+    return { success: false, reason: 'No longer in a market zone' };
+  }
+
+  // Re-validate resources
+  for (const [resource, amount] of Object.entries(pending.offer)) {
+    if ((agent.inventory[resource] || 0) < amount) {
+      pendingTrades.delete(targetId);
+      return { success: false, reason: `Proposer no longer has enough ${resource}` };
+    }
+  }
+  for (const [resource, amount] of Object.entries(pending.request)) {
     if ((target.inventory[resource] || 0) < amount) {
-      return { success: false, reason: `Target has insufficient ${resource}` };
+      pendingTrades.delete(targetId);
+      return { success: false, reason: `You don't have enough ${resource}` };
     }
   }
 
-  // Execute trade
-  for (const [resource, amount] of Object.entries(offer)) {
+  // Inventory cap check: net gain must not exceed capacity
+  const INVENTORY_CAP = 20;
+  const agentTotal = Object.values(agent.inventory).reduce((a, b) => a + b, 0);
+  const targetTotal = Object.values(target.inventory).reduce((a, b) => a + b, 0);
+  const agentNetGain = Object.values(pending.request).reduce((a, b) => a + b, 0) - Object.values(pending.offer).reduce((a, b) => a + b, 0);
+  const targetNetGain = Object.values(pending.offer).reduce((a, b) => a + b, 0) - Object.values(pending.request).reduce((a, b) => a + b, 0);
+  if (agentTotal + agentNetGain > INVENTORY_CAP) {
+    pendingTrades.delete(targetId);
+    return { success: false, reason: 'Trade would exceed proposer inventory cap (20)' };
+  }
+  if (targetTotal + targetNetGain > INVENTORY_CAP) {
+    pendingTrades.delete(targetId);
+    return { success: false, reason: 'Trade would exceed your inventory cap (20)' };
+  }
+
+  // Execute swap
+  for (const [resource, amount] of Object.entries(pending.offer)) {
     agent.inventory[resource] -= amount;
     target.inventory[resource] = (target.inventory[resource] || 0) + amount;
   }
-  for (const [resource, amount] of Object.entries(request)) {
+  for (const [resource, amount] of Object.entries(pending.request)) {
     target.inventory[resource] -= amount;
     agent.inventory[resource] = (agent.inventory[resource] || 0) + amount;
   }
@@ -105,12 +190,14 @@ function executeTrade(world, agentId, targetId, offer, request) {
   agent.score += 20;
   target.score += 20;
 
+  pendingTrades.delete(targetId);
+
   logEvent(world, {
     type: 'trade',
-    agent: agentId,
+    agent: pending.from,
     target: targetId,
-    offer,
-    request
+    offer: pending.offer,
+    request: pending.request
   });
 
   return {
@@ -120,4 +207,22 @@ function executeTrade(world, agentId, targetId, offer, request) {
   };
 }
 
-export { regenerateResources, gatherResource, executeTrade };
+function rejectTrade(targetId) {
+  if (!pendingTrades.has(targetId)) return { success: false, reason: 'No pending trade for you' };
+  pendingTrades.delete(targetId);
+  return { success: true, status: 'rejected' };
+}
+
+function getPendingTrade(targetId) {
+  return pendingTrades.get(targetId) || null;
+}
+
+function cleanExpiredTrades(tick) {
+  for (const [targetId, trade] of pendingTrades) {
+    if (tick - trade.tick >= TRADE_EXPIRY_TICKS) {
+      pendingTrades.delete(targetId);
+    }
+  }
+}
+
+export { regenerateResources, gatherResource, proposeTrade, acceptTrade, rejectTrade, getPendingTrade, cleanExpiredTrades };
