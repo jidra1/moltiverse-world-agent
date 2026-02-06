@@ -28,7 +28,7 @@ const AGENT_INSTRUCTIONS = readFileSync(new URL('../AGENTS.md', import.meta.url)
 const PORT = process.env.PORT || 3000;
 const TICK_INTERVAL = 5000; // 5 seconds
 const ACTION_COOLDOWN_MS = 1000; // Rate limit: 1 action per second per agent
-const INACTIVE_TICKS = 120; // Prune agents after 120 ticks (~10 min) of inactivity
+const INACTIVE_TICKS = 8640; // Prune agents after 8640 ticks (~12 hours) of inactivity
 const agentLastAction = new Map(); // agentId -> timestamp
 
 // Initialize world
