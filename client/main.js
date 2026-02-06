@@ -177,7 +177,7 @@ function handleMessage(msg) {
     // Load initial events
     if (worldState.events) {
       for (const event of worldState.events) {
-        const eid = `${event.tick}-${event.type}-${event.agent || event.attacker || ''}`;
+        const eid = `${event.tick}-${event.type}-${event.agent || event.attacker || ''}-${event.timestamp || ''}`;
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
@@ -208,7 +208,7 @@ function handleMessage(msg) {
     // Add new events
     if (data.events) {
       for (const event of data.events) {
-        const eid = `${event.tick}-${event.type}-${event.agent || event.attacker || ''}`;
+        const eid = `${event.tick}-${event.type}-${event.agent || event.attacker || ''}-${event.timestamp || ''}`;
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
@@ -309,10 +309,11 @@ renderer.domElement.addEventListener('mousemove', (event) => {
       const agents = Object.values(worldState.agents || {}).filter(
         a => a.x === tile.tileX && a.y === tile.tileY
       );
-      let text = `<b>(${tile.tileX}, ${tile.tileY})</b> — ${tile.type}`;
+      const esc = s => String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
+      let text = `<b>(${tile.tileX}, ${tile.tileY})</b> — ${esc(tile.type)}`;
       if (agents.length > 0) {
         text += '<br>' + agents.map(a =>
-          `${a.id} (HP:${a.hp} S:${a.score})`
+          `${esc(a.id)} (HP:${a.hp} S:${a.score})`
         ).join('<br>');
       }
       ui.showTooltip(event.clientX, event.clientY, text);

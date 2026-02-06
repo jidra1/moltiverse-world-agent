@@ -148,7 +148,8 @@ function createWorld() {
         x, y, type,
         resource,
         resourceCount: resource ? 3 : 0,
-        occupants: []
+        occupants: [],
+        droppedLoot: {}
       });
     }
     grid.push(row);
@@ -180,7 +181,10 @@ function getTile(world, x, y) {
 function createAgent(id, agentClass) {
   const spawnX = 31 + Math.floor(Math.random() * 2);
   const spawnY = 31 + Math.floor(Math.random() * 2);
-  const cls = AGENT_CLASSES[agentClass] ? agentClass : DEFAULT_CLASS;
+  if (agentClass && !AGENT_CLASSES[agentClass]) {
+    return null; // invalid class
+  }
+  const cls = agentClass || DEFAULT_CLASS;
   return {
     id,
     x: spawnX,

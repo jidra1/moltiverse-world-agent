@@ -5,6 +5,7 @@ import { GRID_SIZE, getTile, logEvent, AGENT_CLASSES } from './world.js';
 const MAX_RESOURCE_PER_TILE = 5;
 const RESOURCE_REGEN_INTERVAL = 10; // ticks
 const RESOURCE_SCORE = { wood: 5, stone: 10, gold: 25 };
+const VALID_RESOURCES = new Set(['wood', 'stone', 'gold']);
 
 // --- Pending Trades ---
 // Key: targetId, Value: { from, targetId, offer, request, tick }
@@ -67,6 +68,9 @@ function gatherResource(world, agentId) {
 
 function validateTradeAmounts(items) {
   for (const [resource, amount] of Object.entries(items)) {
+    if (!VALID_RESOURCES.has(resource)) {
+      return `Invalid resource: ${resource}. Must be one of: wood, stone, gold`;
+    }
     if (typeof amount !== 'number' || !Number.isInteger(amount) || amount < 0) {
       return `Invalid amount for ${resource}: must be a non-negative integer`;
     }
@@ -148,32 +152,28 @@ function acceptTrade(world, targetId) {
     return { success: false, reason: 'No longer in a market zone' };
   }
 
-  // Re-validate resources
+  // Re-validate resources (non-terminal: keep trade pending so they can retry)
   for (const [resource, amount] of Object.entries(pending.offer)) {
     if ((agent.inventory[resource] || 0) < amount) {
-      pendingTrades.delete(targetId);
       return { success: false, reason: `Proposer no longer has enough ${resource}` };
     }
   }
   for (const [resource, amount] of Object.entries(pending.request)) {
     if ((target.inventory[resource] || 0) < amount) {
-      pendingTrades.delete(targetId);
       return { success: false, reason: `You don't have enough ${resource}` };
     }
   }
 
-  // Inventory cap check: net gain must not exceed capacity
+  // Inventory cap check (non-terminal: keep trade pending)
   const INVENTORY_CAP = 20;
   const agentTotal = Object.values(agent.inventory).reduce((a, b) => a + b, 0);
   const targetTotal = Object.values(target.inventory).reduce((a, b) => a + b, 0);
   const agentNetGain = Object.values(pending.request).reduce((a, b) => a + b, 0) - Object.values(pending.offer).reduce((a, b) => a + b, 0);
   const targetNetGain = Object.values(pending.offer).reduce((a, b) => a + b, 0) - Object.values(pending.request).reduce((a, b) => a + b, 0);
   if (agentTotal + agentNetGain > INVENTORY_CAP) {
-    pendingTrades.delete(targetId);
     return { success: false, reason: 'Trade would exceed proposer inventory cap (20)' };
   }
   if (targetTotal + targetNetGain > INVENTORY_CAP) {
-    pendingTrades.delete(targetId);
     return { success: false, reason: 'Trade would exceed your inventory cap (20)' };
   }
 

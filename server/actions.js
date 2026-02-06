@@ -2,7 +2,7 @@
 
 import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE, AGENT_CLASSES, getHpRegenAmount, getTileType } from './world.js';
 import { resolveCombat } from './combat.js';
-import { gatherResource, executeTrade } from './economy.js';
+import { gatherResource, proposeTrade, acceptTrade, rejectTrade } from './economy.js';
 import { verifyEntry } from './gate.js';
 
 const DIRECTIONS = {
@@ -17,11 +17,14 @@ async function processAction(world, action) {
     case 'enter':  return await handleEnter(world, action);
     case 'move':   return handleMove(world, action);
     case 'gather': return handleGather(world, action);
-    case 'trade':  return handleTrade(world, action);
-    case 'attack': return handleAttack(world, action);
-    case 'speak':  return handleSpeak(world, action);
-    case 'build':  return handleBuild(world, action);
-    default:       return { success: false, reason: `Unknown action: ${action.type}` };
+    case 'trade':        return handleTrade(world, action);
+    case 'accept_trade': return handleAcceptTrade(world, action);
+    case 'reject_trade': return handleRejectTrade(world, action);
+    case 'attack':       return handleAttack(world, action);
+    case 'speak':        return handleSpeak(world, action);
+    case 'build':        return handleBuild(world, action);
+    case 'pickup':       return handlePickup(world, action);
+    default:             return { success: false, reason: `Unknown action: ${action.type}` };
   }
 }
 
@@ -38,6 +41,9 @@ async function handleEnter(world, action) {
   }
 
   const agent = createAgent(agentId, action.class);
+  if (!agent) {
+    return { success: false, reason: `Invalid class: ${action.class}. Must be one of: warrior, gatherer, builder` };
+  }
   addAgent(world, agent);
 
   logEvent(world, { type: 'enter', agent: agentId, x: agent.x, y: agent.y });
@@ -97,7 +103,17 @@ function handleGather(world, action) {
 
 function handleTrade(world, action) {
   const { agentId, targetId, offer, request } = action;
-  return executeTrade(world, agentId, targetId, offer || {}, request || {});
+  return proposeTrade(world, agentId, targetId, offer || {}, request || {});
+}
+
+function handleAcceptTrade(world, action) {
+  const { agentId } = action;
+  return acceptTrade(world, agentId);
+}
+
+function handleRejectTrade(world, action) {
+  const { agentId } = action;
+  return rejectTrade(agentId);
 }
 
 function handleAttack(world, action) {
@@ -112,7 +128,13 @@ function handleSpeak(world, action) {
   if (!agent) return { success: false, reason: 'Agent not in world' };
   if (!agent.alive) return { success: false, reason: 'Agent is dead' };
 
-  const truncated = (message || '').slice(0, 200);
+  const raw = (message || '').trim();
+  if (raw.length === 0) {
+    return { success: false, reason: 'Message cannot be empty' };
+  }
+
+  const truncated = raw.slice(0, 200);
+  const wasTruncated = raw.length > 200;
 
   // Find agents within 5-tile radius
   const hearers = [];
@@ -133,11 +155,13 @@ function handleSpeak(world, action) {
     y: agent.y
   });
 
-  return {
+  const result = {
     success: true,
     message: truncated,
     hearers
   };
+  if (wasTruncated) result.truncated = true;
+  return result;
 }
 
 // --- Building ---
@@ -214,6 +238,50 @@ function handleBuild(world, action) {
     wall: { x: targetX, y: targetY, decayTick: targetTile.wall.decayTick },
     inventory: { ...agent.inventory }
   };
+}
+
+// --- Pickup Ground Loot ---
+function handlePickup(world, action) {
+  const { agentId, resource } = action;
+  const agent = world.agents[agentId];
+
+  if (!agent) return { success: false, reason: 'Agent not in world' };
+  if (!agent.alive) return { success: false, reason: 'Agent is dead' };
+
+  const tile = getTile(world, agent.x, agent.y);
+  if (!tile.droppedLoot || Object.keys(tile.droppedLoot).length === 0) {
+    return { success: false, reason: 'No loot on this tile' };
+  }
+
+  const totalItems = Object.values(agent.inventory).reduce((a, b) => a + b, 0);
+  if (totalItems >= 20) {
+    return { success: false, reason: 'Inventory full (max 20)' };
+  }
+
+  // If resource specified, pick up that one; otherwise pick up first available
+  const resources = resource ? [resource] : Object.keys(tile.droppedLoot);
+  let picked = {};
+  let space = 20 - totalItems;
+
+  for (const r of resources) {
+    const available = tile.droppedLoot[r] || 0;
+    if (available <= 0) continue;
+    const take = Math.min(available, space);
+    if (take <= 0) break;
+    agent.inventory[r] = (agent.inventory[r] || 0) + take;
+    tile.droppedLoot[r] -= take;
+    if (tile.droppedLoot[r] <= 0) delete tile.droppedLoot[r];
+    picked[r] = take;
+    space -= take;
+  }
+
+  if (Object.keys(picked).length === 0) {
+    return { success: false, reason: resource ? `No ${resource} loot on this tile` : 'No loot available' };
+  }
+
+  logEvent(world, { type: 'pickup', agent: agentId, loot: picked, x: agent.x, y: agent.y });
+
+  return { success: true, picked, inventory: { ...agent.inventory } };
 }
 
 async function processActionQueue(world) {

@@ -121,16 +121,21 @@ function loadWorld(world) {
 
     // Fix up agents: default missing class, clamp inventory
     for (const agent of Object.values(world.agents)) {
-      // Bug #8: default missing class
       if (!agent.class || !AGENT_CLASSES[agent.class]) {
         agent.class = DEFAULT_CLASS;
       }
 
-      // Bug #7: clamp inventory to cap
+      // Floor negative inventory values to 0
+      for (const resource of Object.keys(agent.inventory)) {
+        if (agent.inventory[resource] < 0) {
+          agent.inventory[resource] = 0;
+        }
+      }
+
+      // Clamp inventory to cap
       const total = Object.values(agent.inventory).reduce((a, b) => a + b, 0);
       if (total > INVENTORY_CAP) {
         let excess = total - INVENTORY_CAP;
-        // Remove excess starting from least valuable (wood, stone, gold)
         for (const resource of ['wood', 'stone', 'gold']) {
           if (excess <= 0) break;
           const have = agent.inventory[resource] || 0;
