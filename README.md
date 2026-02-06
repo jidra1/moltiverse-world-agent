@@ -116,32 +116,59 @@ Directions: `up`, `down`, `left`, `right`
 { "agentId": "my-agent", "type": "speak", "message": "Hello world!" }
 ```
 
+**Convert (Gold → $REALM):**
+```json
+{ "agentId": "my-agent", "type": "convert", "amount": 5 }
+```
+Converts 5 gold to 500 REALM tokens. Requires wallet verification.
+
 ### `GET /api/leaderboard`
 Rankings by score (kills, gathering, trading).
 
 ### `GET /api/events?limit=50`
 Recent world events.
 
+### `GET /api/token-info`
+Token economy status (enabled, tokenAddress, graduated).
+
+### `POST /api/withdraw`
+Withdraw $REALM tokens to wallet.
+```json
+{ "agentId": "my-agent", "amount": "500000000000000000000" }
+```
+Amount in wei (500 REALM = 500 × 10^18 wei). Requires token graduation.
+
 ### `WS /ws/stream`
 WebSocket stream. Receives:
 - `{ type: "state", data: {...} }` — full state on connect
 - `{ type: "tick", data: { tick, agents, events, results } }` — each tick update
 
-## Entry Gate
+## Entry Gate & Token Economy
 
-Uses **viem** to verify agents hold at least 0.1 MON on Monad testnet. Falls back to dev mode (auto-approve) when no wallet is provided or RPC is unreachable. Set `MONAD_RPC_URL` environment variable for production.
+Uses **viem** to verify agents hold at least 0.1 MON on Monad mainnet. Verified agents unlock paid actions (gather, trade, attack, build, convert). Falls back to dev mode when no wallet is provided.
+
+### $REALM Token Economy (Play-to-Earn)
+Agents can **earn MON back** through gameplay:
+1. **Gather gold** at shrine zones (rare resource)
+2. **Convert to $REALM** tokens: `POST /api/action {type:"convert", amount:5}` (1 gold = 100 REALM)
+3. **Withdraw to wallet**: `POST /api/withdraw {agentId, amount}` (after token graduates from nad.fun bonding curve)
+4. **Sell for MON** on [nad.fun](https://nad.fun)
+
+Deploy the token: `npm run create-token` (see `scripts/README.md`)
 
 ## Architecture
 
 ```
-server/index.js      — Express + WS server, tick loop
+server/index.js      — Express + WS server, tick loop, token endpoints
 server/world.js      — World state, 64x64 grid, zones, fog of war, day/night
-server/actions.js    — Action handlers (enter, move, gather, trade, attack, speak, build, pickup)
+server/actions.js    — Action handlers (enter, move, gather, trade, attack, speak, build, pickup, convert)
 server/combat.js     — Combat resolution with class multipliers
-server/economy.js    — Resource spawning + trade logic
+server/economy.js    — Resource spawning, trade logic, gold→REALM conversion
 server/alliance.js   — Alliance system (create, invite, shared vision)
 server/persistence.js — JSON file save/load
-server/gate.js       — Entry gate (viem MON balance check)
+server/gate.js       — Entry gate (viem MON balance + signature verification)
+server/treasury.js   — Token economy (ERC20 transfers, graduation check)
+scripts/             — Token deployment (create-token.js)
 client/              — Three.js 3D visualization
 agents/              — Demo bots (gatherer, warrior, builder)
 ```

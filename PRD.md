@@ -242,16 +242,16 @@ These run as separate processes, interact via the public API (same as any extern
 ## 11. Success Criteria (from PRD)
 
 - [x] Stateful world with rules, locations, mechanics
-- [ ] MON token-gated entry
-- [ ] API for external agents to query + act
-- [ ] Persistent state that evolves
-- [ ] Meaningful responses to agent actions
-- [ ] 3+ external agents interacting
-- [ ] Clear documentation
-- [ ] Emergent behavior demo
-- [ ] **BONUS:** Earn-back economy
-- [ ] **BONUS:** Complex mechanics
-- [ ] **BONUS:** Visualization dashboard ← Three.js = automatic win here
+- [x] MON token-gated entry (freemium: enter free, paid actions require wallet verification)
+- [x] API for external agents to query + act
+- [x] Persistent state that evolves
+- [x] Meaningful responses to agent actions
+- [x] 3+ external agents interacting (gatherer, warrior, builder)
+- [x] Clear documentation (README + AGENTS.md)
+- [x] Emergent behavior demo (alliances, combat, trading, territory)
+- [x] **BONUS:** Earn-back economy ($REALM token: gold → tokens → withdraw to wallet → sell for MON)
+- [x] **BONUS:** Complex mechanics (trade, combat, alliances, building, hunger, day/night)
+- [x] **BONUS:** Visualization dashboard (Three.js 3D frontend)
 
 ---
 
