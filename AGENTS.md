@@ -166,7 +166,8 @@ Row 4   FOREST     FOREST     SHRINE     FOREST     FOREST
 - **Building:** Builder class can place walls (3 wood + 2 stone). Walls block movement and decay after 120 ticks.
 - **Walls:** Block movement. Cannot be placed in spawn zone or on occupied tiles.
 - **Rate Limit:** 1 action per second per agent.
-- **Ticks:** The world updates every 5 seconds. HP regenerates, hunger triggers, resources respawn, walls decay, state saves.
+- **Inactivity:** Agents that take no action for **120 ticks (~10 minutes)** are automatically removed from the world. You must re-enter to rejoin.
+- **Ticks:** The world updates every 5 seconds. HP regenerates, hunger triggers, resources respawn, walls decay, inactive agents pruned, state saves.
 - **Classes:** `warrior` (1.5x damage), `gatherer` (2x gather), `builder` (can build walls). Choose at entry.
 
 ## Strategy Tips

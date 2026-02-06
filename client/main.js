@@ -17,8 +17,8 @@ const GRID_SIZE = 64;
 const SIDEBAR_WIDTH = 320;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x241530);
-scene.fog = new THREE.FogExp2(0x241530, 0.004);
+scene.background = new THREE.Color(0x141a16);
+scene.fog = new THREE.FogExp2(0x141a16, 0.007);
 
 function canvasWidth() { return window.innerWidth - SIDEBAR_WIDTH; }
 function canvasHeight() { return window.innerHeight; }
@@ -48,7 +48,7 @@ controls.panSpeed = 1.5;
 controls.screenSpacePanning = false; // pan along ground plane
 controls.target.set(0, 0, 0);
 
-const MAP_HALF = GRID_SIZE / 2 + 4; // allow slight overshoot past edges
+const MAP_HALF = GRID_SIZE / 2 + 15; // allow some pan beyond the grid edge
 
 // --- Keyboard pan (WASD / Arrow keys) ---
 const keysDown = new Set();
@@ -293,19 +293,21 @@ function triggerEffect(event) {
 function updateDayNight(cycle) {
   currentCycle = cycle;
   if (cycle.isNight) {
-    // Night: dim ambient and hemisphere lights
+    // Night: dim lights, thicker fog
     ambientLight.intensity = 0.2;
     hemiLight.intensity = 0.5;
     dirLight.intensity = 0.4;
-    scene.fog.density = 0.008;
-    scene.background.setHex(0x0a0510);
+    scene.fog.density = 0.012;
+    scene.fog.color.setHex(0x060808);
+    scene.background.setHex(0x060808);
   } else {
     // Day: normal lighting
     ambientLight.intensity = 0.6;
     hemiLight.intensity = 1.5;
     dirLight.intensity = 1.6;
-    scene.fog.density = 0.004;
-    scene.background.setHex(0x241530);
+    scene.fog.density = 0.007;
+    scene.fog.color.setHex(0x141a16);
+    scene.background.setHex(0x141a16);
   }
 }
 

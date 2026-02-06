@@ -3,6 +3,7 @@
 import * as THREE from 'three';
 
 const GRID_SIZE = 64;
+const TERRAIN_SIZE = 200; // terrain extends far beyond the grid for infinite look
 const TILE_SIZE = 1;
 const GAP = 0.05;
 
@@ -496,6 +497,19 @@ function getBlendedZoneColor(worldX, worldZ) {
   result.g = Math.min(1, Math.max(0, result.g * hueG));
   result.b = Math.min(1, Math.max(0, result.b * hueB));
 
+  // Gradually darken terrain outside the game grid (wilderness fade)
+  const gridHalf = GRID_SIZE / 2;
+  const edgeDist = Math.max(
+    Math.max(0, Math.abs(worldX) - gridHalf),
+    Math.max(0, Math.abs(worldZ) - gridHalf)
+  );
+  if (edgeDist > 0) {
+    const fade = Math.max(0.15, 1 - edgeDist * 0.013);
+    result.r *= fade;
+    result.g *= fade;
+    result.b *= fade;
+  }
+
   return result;
 }
 
@@ -528,12 +542,12 @@ export class WorldRenderer {
   buildGrid() {
     const half = GRID_SIZE / 2;
 
-    // Ground plane beneath the grid (below terrain valleys)
-    const groundGeo = new THREE.PlaneGeometry(90, 90);
-    const groundMat = new THREE.MeshStandardMaterial({ color: 0x241530, roughness: 0.95, metalness: 0.0 });
+    // Ground plane beneath the terrain (safety net below valleys)
+    const groundGeo = new THREE.PlaneGeometry(600, 600);
+    const groundMat = new THREE.MeshStandardMaterial({ color: 0x0a120a, roughness: 0.95, metalness: 0.0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
-    ground.position.y = -3;
+    ground.position.y = -4;
     ground.receiveShadow = true;
     this.gridGroup.add(ground);
 
@@ -570,6 +584,10 @@ export class WorldRenderer {
     // Market bazaar decorations
     this.addMarketDecorations();
 
+    // Border forest beyond the game grid (sells the infinite look)
+    this.addBorderTrees();
+    this.addBorderGrass();
+
     // Zone border lines (disabled — blended terrain replaces hard edges)
     // this.addZoneBorders();
 
@@ -581,8 +599,8 @@ export class WorldRenderer {
   }
 
   createTerrain() {
-    const segs = 256;
-    const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE, segs, segs);
+    const segs = 400;
+    const geo = new THREE.PlaneGeometry(TERRAIN_SIZE, TERRAIN_SIZE, segs, segs);
     const posAttr = geo.attributes.position;
     const colors = new Float32Array(posAttr.count * 3);
 
@@ -925,6 +943,108 @@ export class WorldRenderer {
         }
         // else: bare market ground (~69%)
       }
+    }
+  }
+
+  addBorderTrees() {
+    const gridHalf = GRID_SIZE / 2;
+    const maxDist = 50;
+    const step = 1.8;
+
+    // First pass: collect tree positions
+    const trees = [];
+    for (let wx = -(gridHalf + maxDist); wx < gridHalf + maxDist; wx += step) {
+      for (let wz = -(gridHalf + maxDist); wz < gridHalf + maxDist; wz += step) {
+        if (Math.abs(wx) < gridHalf + 0.5 && Math.abs(wz) < gridHalf + 0.5) continue;
+        const dist = Math.max(0, Math.max(Math.abs(wx), Math.abs(wz)) - gridHalf);
+        const prob = 0.3 * (1 - dist / maxDist);
+        if (prob <= 0) continue;
+        const h = tileHash(Math.floor(wx * 7 + 5000), Math.floor(wz * 7 + 5000));
+        if (h >= prob) continue;
+        const scale = (0.3 + h * 0.7) * Math.max(0.3, 1 - dist / maxDist);
+        const matIdx = Math.floor(h * 97) % FOLIAGE_MATS.length;
+        const rotY = tileHash(Math.floor(wx * 13), Math.floor(wz * 17)) * Math.PI * 2;
+        trees.push({ wx, wz, scale, matIdx, rotY });
+      }
+    }
+
+    if (trees.length === 0) return;
+
+    // Count per material
+    const foliageCnts = new Array(FOLIAGE_MATS.length).fill(0);
+    for (const t of trees) foliageCnts[t.matIdx]++;
+
+    const trunkIM = new THREE.InstancedMesh(TRUNK_GEO, TRUNK_MAT, trees.length);
+    const foliageIMs = FOLIAGE_MATS.map((mat, idx) =>
+      new THREE.InstancedMesh(FOLIAGE_GEO, mat, Math.max(1, foliageCnts[idx]))
+    );
+    const foliageIdxs = new Array(FOLIAGE_MATS.length).fill(0);
+    const dummy = new THREE.Object3D();
+
+    for (let i = 0; i < trees.length; i++) {
+      const { wx, wz, scale, matIdx, rotY } = trees[i];
+      const baseY = getTerrainHeight(wx, wz);
+      dummy.position.set(wx, baseY + 0.45 * scale, wz);
+      dummy.scale.setScalar(scale);
+      dummy.rotation.set(0, rotY, 0);
+      dummy.updateMatrix();
+      trunkIM.setMatrixAt(i, dummy.matrix);
+
+      dummy.position.set(wx, baseY + (0.9 + 0.35) * scale, wz);
+      dummy.updateMatrix();
+      foliageIMs[matIdx].setMatrixAt(foliageIdxs[matIdx]++, dummy.matrix);
+    }
+
+    trunkIM.instanceMatrix.needsUpdate = true;
+    this.gridGroup.add(trunkIM);
+    for (const im of foliageIMs) {
+      im.instanceMatrix.needsUpdate = true;
+      this.gridGroup.add(im);
+    }
+  }
+
+  addBorderGrass() {
+    const gridHalf = GRID_SIZE / 2;
+    const maxDist = 45;
+    const step = 1.2;
+
+    // Count per material
+    const bladeData = [];
+    for (let wx = -(gridHalf + maxDist); wx < gridHalf + maxDist; wx += step) {
+      for (let wz = -(gridHalf + maxDist); wz < gridHalf + maxDist; wz += step) {
+        if (Math.abs(wx) < gridHalf + 0.5 && Math.abs(wz) < gridHalf + 0.5) continue;
+        const dist = Math.max(0, Math.max(Math.abs(wx), Math.abs(wz)) - gridHalf);
+        const prob = 0.4 * (1 - dist / maxDist);
+        if (prob <= 0) continue;
+        const h = tileHash(Math.floor(wx * 11 + 3000), Math.floor(wz * 11 + 3000));
+        if (h >= prob) continue;
+        const matIdx = Math.floor(h * GRASS_MATS.length);
+        const scale = (0.4 + h * 0.6) * Math.max(0.2, 1 - dist / maxDist);
+        bladeData.push({ wx, wz, scale, matIdx, h });
+      }
+    }
+
+    const matCnts = new Array(GRASS_MATS.length).fill(0);
+    for (const b of bladeData) matCnts[b.matIdx]++;
+
+    const instances = GRASS_MATS.map((mat, idx) =>
+      new THREE.InstancedMesh(GRASS_GEO, mat, Math.max(1, matCnts[idx]))
+    );
+    const counters = new Array(GRASS_MATS.length).fill(0);
+    const dummy = new THREE.Object3D();
+
+    for (const b of bladeData) {
+      const terrY = getTerrainHeight(b.wx, b.wz);
+      dummy.position.set(b.wx, terrY + 0.075 * b.scale, b.wz);
+      dummy.scale.set(b.scale, b.scale, b.scale);
+      dummy.rotation.set(0, b.h * Math.PI * 2, (b.h - 0.5) * 0.3);
+      dummy.updateMatrix();
+      instances[b.matIdx].setMatrixAt(counters[b.matIdx]++, dummy.matrix);
+    }
+
+    for (const im of instances) {
+      im.instanceMatrix.needsUpdate = true;
+      this.gridGroup.add(im);
     }
   }
 
