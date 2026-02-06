@@ -17,7 +17,8 @@ async function getMyState() {
 }
 
 // Forest zone target (top-left forest)
-const FOREST = { x: 5, y: 5 };
+// Top-left quadrant
+const FOREST = { x: 8, y: 8 };
 const MARKET = { x: 19, y: 31 };
 
 function moveToward(current, target) {
