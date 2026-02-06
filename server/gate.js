@@ -1,20 +1,34 @@
 // Entry gate — viem-based native MON balance + signature verification on Monad testnet
 // Falls back to auto-approve when no wallet is provided (dev mode)
 
-import { createPublicClient, http, verifyMessage } from 'viem';
-import { monadTestnet } from 'viem/chains';
+import { createPublicClient, http, verifyMessage, defineChain } from 'viem';
 
 const enteredAgents = new Set();
 
 // Native MON balance check — no token address needed (MON is the native gas token)
 const REQUIRED_BALANCE = 100_000_000_000_000_000n; // 0.1 MON (18 decimals)
 
-const MONAD_RPC_URL = process.env.MONAD_RPC_URL || undefined; // falls back to viem's default
+// Monad Mainnet chain config
+const monadMainnet = defineChain({
+  id: 143,
+  name: 'Monad',
+  network: 'monad',
+  nativeCurrency: { name: 'MON', symbol: 'MON', decimals: 18 },
+  rpcUrls: {
+    default: { http: ['https://rpc.monad.xyz'] },
+    public: { http: ['https://rpc.monad.xyz'] },
+  },
+  blockExplorers: {
+    default: { name: 'MonadVision', url: 'https://monadvision.com' },
+  },
+});
+
+const MONAD_RPC_URL = process.env.MONAD_RPC_URL || 'https://rpc.monad.xyz';
 
 let publicClient;
 try {
   publicClient = createPublicClient({
-    chain: monadTestnet,
+    chain: monadMainnet,
     transport: http(MONAD_RPC_URL),
   });
 } catch (e) {
