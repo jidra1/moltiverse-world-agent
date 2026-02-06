@@ -1,8 +1,9 @@
 // Visual effects — chat bubbles, combat flashes, gather particles
 
 import * as THREE from 'three';
+import { getTerrainHeight } from './world-renderer.js';
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 64;
 
 export class EffectsManager {
   constructor(scene) {
@@ -11,7 +12,9 @@ export class EffectsManager {
   }
 
   toWorld(x, y) {
-    return { x: x - GRID_SIZE / 2 + 0.5, z: y - GRID_SIZE / 2 + 0.5 };
+    const wx = x - GRID_SIZE / 2 + 0.5;
+    const wz = y - GRID_SIZE / 2 + 0.5;
+    return { x: wx, y: getTerrainHeight(wx, wz), z: wz };
   }
 
   // --- Chat Bubble ---
@@ -41,7 +44,7 @@ export class EffectsManager {
     const sprite = new THREE.Sprite(material);
 
     const pos = this.toWorld(agentX, agentY);
-    sprite.position.set(pos.x, 2.5, pos.z);
+    sprite.position.set(pos.x, pos.y + 2.5, pos.z);
     sprite.scale.set(4, 1, 1);
 
     this.scene.add(sprite);
@@ -60,10 +63,10 @@ export class EffectsManager {
   // --- Combat Flash ---
   addCombatFlash(x, y) {
     const geo = new THREE.RingGeometry(0.1, 0.6, 16);
-    const mat = new THREE.MeshBasicMaterial({ color: 0xff3333, transparent: true, opacity: 1, side: THREE.DoubleSide });
+    const mat = new THREE.MeshStandardMaterial({ color: 0xff3333, transparent: true, opacity: 1, side: THREE.DoubleSide, emissive: 0xff2200, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.0 });
     const mesh = new THREE.Mesh(geo, mat);
     const pos = this.toWorld(x, y);
-    mesh.position.set(pos.x, 0.5, pos.z);
+    mesh.position.set(pos.x, pos.y + 0.5, pos.z);
     mesh.rotation.x = -Math.PI / 2;
 
     this.scene.add(mesh);
@@ -88,12 +91,12 @@ export class EffectsManager {
 
     for (let i = 0; i < 5; i++) {
       const geo = new THREE.SphereGeometry(0.06, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ color, transparent: true, opacity: 1 });
+      const mat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 1, emissive: color, emissiveIntensity: 1.5, roughness: 0.5, metalness: 0.0 });
       const mesh = new THREE.Mesh(geo, mat);
 
       const offsetX = (Math.random() - 0.5) * 0.6;
       const offsetZ = (Math.random() - 0.5) * 0.6;
-      mesh.position.set(pos.x + offsetX, 0.2, pos.z + offsetZ);
+      mesh.position.set(pos.x + offsetX, pos.y + 0.2, pos.z + offsetZ);
 
       const velY = 1 + Math.random() * 1.5;
       const velX = (Math.random() - 0.5) * 0.5;
@@ -122,10 +125,10 @@ export class EffectsManager {
 
     for (let i = 0; i < 12; i++) {
       const geo = new THREE.SphereGeometry(0.08, 6, 6);
-      const mat = new THREE.MeshBasicMaterial({ color: 0xff2222, transparent: true, opacity: 1 });
+      const mat = new THREE.MeshStandardMaterial({ color: 0xff2222, transparent: true, opacity: 1, emissive: 0xff2200, emissiveIntensity: 3.0, roughness: 0.5, metalness: 0.0 });
       const mesh = new THREE.Mesh(geo, mat);
 
-      mesh.position.set(pos.x, 0.5, pos.z);
+      mesh.position.set(pos.x, pos.y + 0.5, pos.z);
       const angle = (i / 12) * Math.PI * 2;
       const speed = 2 + Math.random() * 2;
       const velX = Math.cos(angle) * speed;
@@ -151,10 +154,10 @@ export class EffectsManager {
   // --- Enter Glow ---
   addEnterGlow(x, y) {
     const geo = new THREE.RingGeometry(0.05, 0.4, 24);
-    const mat = new THREE.MeshBasicMaterial({ color: 0x44ff88, transparent: true, opacity: 1, side: THREE.DoubleSide });
+    const mat = new THREE.MeshStandardMaterial({ color: 0x44ff88, transparent: true, opacity: 1, side: THREE.DoubleSide, emissive: 0x44ff88, emissiveIntensity: 1.5, roughness: 0.5, metalness: 0.0 });
     const mesh = new THREE.Mesh(geo, mat);
     const pos = this.toWorld(x, y);
-    mesh.position.set(pos.x, 0.1, pos.z);
+    mesh.position.set(pos.x, pos.y + 0.1, pos.z);
     mesh.rotation.x = -Math.PI / 2;
 
     this.scene.add(mesh);

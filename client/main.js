@@ -2,62 +2,123 @@
 
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
+import { EffectComposer } from 'three/addons/postprocessing/EffectComposer.js';
+import { RenderPass } from 'three/addons/postprocessing/RenderPass.js';
+import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js';
+import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { WorldRenderer } from './world-renderer.js';
 import { AgentRenderer } from './agent-renderer.js';
 import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
 
 // --- Scene Setup ---
+const GRID_SIZE = 64;
 const SIDEBAR_WIDTH = 320;
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x080810);
-scene.fog = new THREE.FogExp2(0x080810, 0.015);
+scene.background = new THREE.Color(0x241530);
+scene.fog = new THREE.FogExp2(0x241530, 0.004);
 
 function canvasWidth() { return window.innerWidth - SIDEBAR_WIDTH; }
 function canvasHeight() { return window.innerHeight; }
 
-const camera = new THREE.PerspectiveCamera(60, canvasWidth() / canvasHeight(), 0.1, 200);
-camera.position.set(0, 30, 25);
+const camera = new THREE.PerspectiveCamera(50, canvasWidth() / canvasHeight(), 0.1, 300);
+camera.position.set(0, 55, 45);
 camera.lookAt(0, 0, 0);
 
 const renderer = new THREE.WebGLRenderer({ antialias: true });
 renderer.setSize(canvasWidth(), canvasHeight());
-renderer.setPixelRatio(window.devicePixelRatio);
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.8;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
 container.appendChild(renderer.domElement);
 
-// Controls
+// Controls — orbit + pan (right-click / two-finger drag to pan)
 const controls = new OrbitControls(camera, renderer.domElement);
 controls.enableDamping = true;
 controls.dampingFactor = 0.1;
 controls.minDistance = 10;
-controls.maxDistance = 80;
+controls.maxDistance = 150;
 controls.maxPolarAngle = Math.PI / 2.2;
+controls.enablePan = true;
+controls.panSpeed = 1.5;
+controls.screenSpacePanning = false; // pan along ground plane
 controls.target.set(0, 0, 0);
 
-// Lighting
-const ambientLight = new THREE.AmbientLight(0x303050, 1.2);
+const MAP_HALF = GRID_SIZE / 2 + 4; // allow slight overshoot past edges
+
+// --- Keyboard pan (WASD / Arrow keys) ---
+const keysDown = new Set();
+window.addEventListener('keydown', (e) => {
+  if (['w','a','s','d','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.key)) {
+    keysDown.add(e.key);
+    e.preventDefault();
+  }
+});
+window.addEventListener('keyup', (e) => keysDown.delete(e.key));
+
+// Lighting — warm ground bounce + purple fill
+const hemiLight = new THREE.HemisphereLight(0x8899cc, 0xc97840, 1.5);
+scene.add(hemiLight);
+
+const ambientLight = new THREE.AmbientLight(0x4a3a50, 0.6);
 scene.add(ambientLight);
 
-const dirLight = new THREE.DirectionalLight(0xddeeff, 0.8);
+const dirLight = new THREE.DirectionalLight(0xffeedd, 1.6);
 dirLight.position.set(20, 40, 15);
+dirLight.castShadow = true;
+dirLight.shadow.mapSize.set(1024, 1024);
+dirLight.shadow.camera.left = -40;
+dirLight.shadow.camera.right = 40;
+dirLight.shadow.camera.top = 40;
+dirLight.shadow.camera.bottom = -40;
+dirLight.shadow.camera.near = 10;
+dirLight.shadow.camera.far = 120;
 scene.add(dirLight);
 
-// Subtle colored zone accent lights
+const fillLight = new THREE.DirectionalLight(0xffcc88, 0.4);
+fillLight.position.set(-15, 20, -10);
+scene.add(fillLight);
+
+// Zone accent lights — non-forest zones only (forests lit by ambient)
 const zoneLights = [
-  { color: 0x44aa55, x: -10, z: -10, intensity: 0.4 },  // forest top-left
-  { color: 0x44aa55, x: -10, z: 10, intensity: 0.4 },   // forest bottom-left
-  { color: 0xccaa33, x: -10, z: 0, intensity: 0.3 },     // market
-  { color: 0xcc4444, x: 10, z: 0, intensity: 0.3 },      // arena
-  { color: 0xcc9933, x: 10, z: -10, intensity: 0.4 },    // shrine top
-  { color: 0xcc9933, x: 10, z: 10, intensity: 0.4 },     // shrine bottom
-  { color: 0x6666aa, x: 0, z: 0, intensity: 0.3 },       // spawn center
+  // Spawn center
+  { color: 0x7777cc, x:   0,   z: 0,     intensity: 0.8 },
+  // Shrines (4)
+  { color: 0xddaa22, x:   0,   z: -25.5, intensity: 1.2 },
+  { color: 0xddaa22, x: -25.5, z: 0,     intensity: 1.2 },
+  { color: 0xddaa22, x:  25.5, z: 0,     intensity: 1.2 },
+  { color: 0xddaa22, x:   0,   z: 25.5,  intensity: 1.2 },
+  // Arenas (4)
+  { color: 0xee3333, x: -12.5, z: -13,   intensity: 0.8 },
+  { color: 0xee3333, x:  12.5, z: -13,   intensity: 0.8 },
+  { color: 0xee3333, x: -12.5, z: 13,    intensity: 0.8 },
+  { color: 0xee3333, x:  12.5, z: 13,    intensity: 0.8 },
+  // Markets (4)
+  { color: 0xddaa22, x:   0,   z: -13,   intensity: 0.8 },
+  { color: 0xddaa22, x: -12.5, z: 0,     intensity: 0.8 },
+  { color: 0xddaa22, x:  12.5, z: 0,     intensity: 0.8 },
+  { color: 0xddaa22, x:   0,   z: 13,    intensity: 0.8 },
 ];
 for (const zl of zoneLights) {
-  const light = new THREE.PointLight(zl.color, zl.intensity, 25);
-  light.position.set(zl.x, 3, zl.z);
+  const light = new THREE.PointLight(zl.color, zl.intensity, 35);
+  light.position.set(zl.x, 6, zl.z);
   scene.add(light);
 }
+
+// --- Post-processing ---
+const composer = new EffectComposer(renderer);
+composer.addPass(new RenderPass(scene, camera));
+const bloomPass = new UnrealBloomPass(
+  new THREE.Vector2(canvasWidth(), canvasHeight()),
+  0.6,   // strength
+  0.7,   // radius
+  0.6    // threshold
+);
+composer.addPass(bloomPass);
+composer.addPass(new OutputPass());
 
 // --- Renderers ---
 const worldRenderer = new WorldRenderer(scene);
@@ -213,20 +274,28 @@ renderer.domElement.addEventListener('mousemove', (event) => {
   mouse.y = -(event.clientY / canvasHeight()) * 2 + 1;
 
   raycaster.setFromCamera(mouse, camera);
-  const intersects = raycaster.intersectObjects(worldRenderer.tileMeshes);
+  const intersects = raycaster.intersectObject(worldRenderer.raycastPlane);
 
   if (intersects.length > 0) {
-    const tile = intersects[0].object.userData;
-    const agents = Object.values(worldState.agents || {}).filter(
-      a => a.x === tile.tileX && a.y === tile.tileY
-    );
-    let text = `<b>(${tile.tileX}, ${tile.tileY})</b> — ${tile.type}`;
-    if (agents.length > 0) {
-      text += '<br>' + agents.map(a =>
-        `${a.id} (HP:${a.hp} S:${a.score})`
-      ).join('<br>');
+    const point = intersects[0].point;
+    const tileX = Math.floor(point.x + GRID_SIZE / 2);
+    const tileY = Math.floor(point.z + GRID_SIZE / 2);
+    const tileObj = worldRenderer.getTileAt(tileX, tileY);
+    if (tileObj) {
+      const tile = tileObj.userData;
+      const agents = Object.values(worldState.agents || {}).filter(
+        a => a.x === tile.tileX && a.y === tile.tileY
+      );
+      let text = `<b>(${tile.tileX}, ${tile.tileY})</b> — ${tile.type}`;
+      if (agents.length > 0) {
+        text += '<br>' + agents.map(a =>
+          `${a.id} (HP:${a.hp} S:${a.score})`
+        ).join('<br>');
+      }
+      ui.showTooltip(event.clientX, event.clientY, text);
+    } else {
+      ui.hideTooltip();
     }
-    ui.showTooltip(event.clientX, event.clientY, text);
   } else {
     ui.hideTooltip();
   }
@@ -237,6 +306,7 @@ window.addEventListener('resize', () => {
   camera.aspect = canvasWidth() / canvasHeight();
   camera.updateProjectionMatrix();
   renderer.setSize(canvasWidth(), canvasHeight());
+  composer.setSize(canvasWidth(), canvasHeight());
 });
 
 // --- Animation Loop ---
@@ -246,11 +316,37 @@ function animate() {
   requestAnimationFrame(animate);
   const delta = clock.getDelta();
 
+  // Keyboard pan — move target + camera together
+  if (keysDown.size > 0) {
+    const speed = 20 * delta;
+    // Forward direction from camera (projected onto XZ plane)
+    const forward = new THREE.Vector3();
+    camera.getWorldDirection(forward);
+    forward.y = 0;
+    forward.normalize();
+    const right = new THREE.Vector3().crossVectors(forward, camera.up).normalize();
+
+    const move = new THREE.Vector3();
+    if (keysDown.has('w') || keysDown.has('ArrowUp'))    move.add(forward);
+    if (keysDown.has('s') || keysDown.has('ArrowDown'))  move.sub(forward);
+    if (keysDown.has('d') || keysDown.has('ArrowRight')) move.add(right);
+    if (keysDown.has('a') || keysDown.has('ArrowLeft'))  move.sub(right);
+
+    if (move.lengthSq() > 0) {
+      move.normalize().multiplyScalar(speed);
+      controls.target.add(move);
+      camera.position.add(move);
+    }
+  }
+
+  // Clamp pan target to map bounds
+  controls.target.x = Math.max(-MAP_HALF, Math.min(MAP_HALF, controls.target.x));
+  controls.target.z = Math.max(-MAP_HALF, Math.min(MAP_HALF, controls.target.z));
   controls.update();
   agentRenderer.animate(delta);
   effects.animate(delta);
 
-  renderer.render(scene, camera);
+  composer.render();
 }
 
 // --- Start ---

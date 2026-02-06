@@ -61,8 +61,8 @@ function resolveCombat(world, attackerId, defenderId) {
   if (attacker.hp <= 0) {
     attacker.hp = 50;
     attacker.alive = true;
-    const spawnX = 15 + Math.floor(Math.random() * 2);
-    const spawnY = 15 + Math.floor(Math.random() * 2);
+    const spawnX = 31 + Math.floor(Math.random() * 2);
+    const spawnY = 31 + Math.floor(Math.random() * 2);
     moveAgentToTile(world, attacker.id, spawnX, spawnY);
   }
 
@@ -99,8 +99,8 @@ function handleDeath(world, killer, victim) {
   // Respawn victim at spawn zone with 50 HP
   victim.hp = 50;
   victim.alive = true;
-  const spawnX = 15 + Math.floor(Math.random() * 2);
-  const spawnY = 15 + Math.floor(Math.random() * 2);
+  const spawnX = 31 + Math.floor(Math.random() * 2);
+  const spawnY = 31 + Math.floor(Math.random() * 2);
   moveAgentToTile(world, victim.id, spawnX, spawnY);
 
   return loot;

@@ -1,20 +1,47 @@
-// World state: 32x32 grid with zones, resources, agents
+// World state: 64x64 grid with zones, resources, agents
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 64;
 const TILE_TYPES = { SPAWN: 'spawn', FOREST: 'forest', MARKET: 'market', ARENA: 'arena', SHRINE: 'shrine' };
 const RESOURCE_TYPES = { WOOD: 'wood', STONE: 'stone', GOLD: 'gold' };
 
-// Zone definitions (x/y ranges)
+// Zone definitions — 5x5 grid (25 zones), boundaries at 13/26/38/51
+//         Col 0(0-12)  Col 1(13-25)  Col 2(26-37)  Col 3(38-50)  Col 4(51-63)
+// Row 0:  FOREST       FOREST        SHRINE         FOREST        FOREST
+// Row 1:  FOREST       ARENA         MARKET         ARENA         FOREST
+// Row 2:  SHRINE       MARKET        SPAWN          MARKET        SHRINE
+// Row 3:  FOREST       ARENA         MARKET         ARENA         FOREST
+// Row 4:  FOREST       FOREST        SHRINE         FOREST        FOREST
 const ZONES = [
-  { type: TILE_TYPES.SPAWN,  x1: 11, y1: 11, x2: 20, y2: 20 },
-  { type: TILE_TYPES.FOREST, x1: 0,  y1: 0,  x2: 10, y2: 10 },
-  { type: TILE_TYPES.FOREST, x1: 11, y1: 0,  x2: 20, y2: 10 },
-  { type: TILE_TYPES.FOREST, x1: 0,  y1: 21, x2: 10, y2: 31 },
-  { type: TILE_TYPES.FOREST, x1: 11, y1: 21, x2: 20, y2: 31 },
-  { type: TILE_TYPES.MARKET,  x1: 0,  y1: 11, x2: 10, y2: 20 },
-  { type: TILE_TYPES.ARENA,   x1: 21, y1: 11, x2: 31, y2: 20 },
-  { type: TILE_TYPES.SHRINE,  x1: 21, y1: 0,  x2: 31, y2: 10 },
-  { type: TILE_TYPES.SHRINE,  x1: 21, y1: 21, x2: 31, y2: 31 },
+  // Row 0
+  { type: TILE_TYPES.FOREST, x1: 0,  y1: 0,  x2: 12, y2: 12 },
+  { type: TILE_TYPES.FOREST, x1: 13, y1: 0,  x2: 25, y2: 12 },
+  { type: TILE_TYPES.SHRINE, x1: 26, y1: 0,  x2: 37, y2: 12 },
+  { type: TILE_TYPES.FOREST, x1: 38, y1: 0,  x2: 50, y2: 12 },
+  { type: TILE_TYPES.FOREST, x1: 51, y1: 0,  x2: 63, y2: 12 },
+  // Row 1
+  { type: TILE_TYPES.FOREST, x1: 0,  y1: 13, x2: 12, y2: 25 },
+  { type: TILE_TYPES.ARENA,  x1: 13, y1: 13, x2: 25, y2: 25 },
+  { type: TILE_TYPES.MARKET, x1: 26, y1: 13, x2: 37, y2: 25 },
+  { type: TILE_TYPES.ARENA,  x1: 38, y1: 13, x2: 50, y2: 25 },
+  { type: TILE_TYPES.FOREST, x1: 51, y1: 13, x2: 63, y2: 25 },
+  // Row 2
+  { type: TILE_TYPES.SHRINE, x1: 0,  y1: 26, x2: 12, y2: 37 },
+  { type: TILE_TYPES.MARKET, x1: 13, y1: 26, x2: 25, y2: 37 },
+  { type: TILE_TYPES.SPAWN,  x1: 26, y1: 26, x2: 37, y2: 37 },
+  { type: TILE_TYPES.MARKET, x1: 38, y1: 26, x2: 50, y2: 37 },
+  { type: TILE_TYPES.SHRINE, x1: 51, y1: 26, x2: 63, y2: 37 },
+  // Row 3
+  { type: TILE_TYPES.FOREST, x1: 0,  y1: 38, x2: 12, y2: 50 },
+  { type: TILE_TYPES.ARENA,  x1: 13, y1: 38, x2: 25, y2: 50 },
+  { type: TILE_TYPES.MARKET, x1: 26, y1: 38, x2: 37, y2: 50 },
+  { type: TILE_TYPES.ARENA,  x1: 38, y1: 38, x2: 50, y2: 50 },
+  { type: TILE_TYPES.FOREST, x1: 51, y1: 38, x2: 63, y2: 50 },
+  // Row 4
+  { type: TILE_TYPES.FOREST, x1: 0,  y1: 51, x2: 12, y2: 63 },
+  { type: TILE_TYPES.FOREST, x1: 13, y1: 51, x2: 25, y2: 63 },
+  { type: TILE_TYPES.SHRINE, x1: 26, y1: 51, x2: 37, y2: 63 },
+  { type: TILE_TYPES.FOREST, x1: 38, y1: 51, x2: 50, y2: 63 },
+  { type: TILE_TYPES.FOREST, x1: 51, y1: 51, x2: 63, y2: 63 },
 ];
 
 // Resource mapping per zone type
@@ -65,8 +92,8 @@ function getTile(world, x, y) {
 }
 
 function createAgent(id) {
-  const spawnX = 15 + Math.floor(Math.random() * 2);
-  const spawnY = 15 + Math.floor(Math.random() * 2);
+  const spawnX = 31 + Math.floor(Math.random() * 2);
+  const spawnY = 31 + Math.floor(Math.random() * 2);
   return {
     id,
     x: spawnX,

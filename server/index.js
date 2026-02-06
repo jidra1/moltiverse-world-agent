@@ -4,7 +4,7 @@ import express from 'express';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
-import { createWorld } from './world.js';
+import { GRID_SIZE, createWorld } from './world.js';
 import { processActionQueue, regenerateHp } from './actions.js';
 import { regenerateResources } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
@@ -174,8 +174,8 @@ setInterval(tick, TICK_INTERVAL);
 function getWorldSnapshot() {
   // Only send tiles with occupants or non-default resource counts
   const tiles = [];
-  for (let y = 0; y < 32; y++) {
-    for (let x = 0; x < 32; x++) {
+  for (let y = 0; y < GRID_SIZE; y++) {
+    for (let x = 0; x < GRID_SIZE; x++) {
       const t = world.grid[y][x];
       if (t.occupants.length > 0 || (t.resource && t.resourceCount !== 3)) {
         tiles.push({
@@ -191,7 +191,7 @@ function getWorldSnapshot() {
 
   return {
     tick: world.tick,
-    gridSize: 32,
+    gridSize: GRID_SIZE,
     agents: world.agents,
     activeTiles: tiles,
     events: world.eventLog.slice(-20)

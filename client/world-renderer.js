@@ -2,7 +2,7 @@
 
 import * as THREE from 'three';
 
-const GRID_SIZE = 32;
+const GRID_SIZE = 64;
 const TILE_SIZE = 1;
 const GAP = 0.05;
 
@@ -90,7 +90,7 @@ const GRASS_MATS = [
   new THREE.MeshStandardMaterial({ color: 0x1f6b1f, roughness: 0.8, metalness: 0.0 }),
   new THREE.MeshStandardMaterial({ color: 0x4a9a3a, roughness: 0.8, metalness: 0.0 }),
 ];
-const BLADES_PER_TILE = 5;
+const BLADES_PER_TILE = 3;
 
 // --- Mountain constants ---
 const MOUNTAIN_BASE_GEO = new THREE.ConeGeometry(1.2, 0.9, 6);   // wide squat base
@@ -366,17 +366,38 @@ function createMountain(scale, peakMat, rotationY) {
   return group;
 }
 
-// Zone definitions matching server
+// Zone definitions matching server — 5x5 grid, 25 zones
 const ZONES = [
-  { type: 'spawn',  x1: 11, y1: 11, x2: 20, y2: 20 },
-  { type: 'forest', x1: 0,  y1: 0,  x2: 10, y2: 10 },
-  { type: 'forest', x1: 11, y1: 0,  x2: 20, y2: 10 },
-  { type: 'forest', x1: 0,  y1: 21, x2: 10, y2: 31 },
-  { type: 'forest', x1: 11, y1: 21, x2: 20, y2: 31 },
-  { type: 'market',  x1: 0,  y1: 11, x2: 10, y2: 20 },
-  { type: 'arena',   x1: 21, y1: 11, x2: 31, y2: 20 },
-  { type: 'shrine',  x1: 21, y1: 0,  x2: 31, y2: 10 },
-  { type: 'shrine',  x1: 21, y1: 21, x2: 31, y2: 31 },
+  // Row 0
+  { type: 'forest', x1: 0,  y1: 0,  x2: 12, y2: 12 },
+  { type: 'forest', x1: 13, y1: 0,  x2: 25, y2: 12 },
+  { type: 'shrine', x1: 26, y1: 0,  x2: 37, y2: 12 },
+  { type: 'forest', x1: 38, y1: 0,  x2: 50, y2: 12 },
+  { type: 'forest', x1: 51, y1: 0,  x2: 63, y2: 12 },
+  // Row 1
+  { type: 'forest', x1: 0,  y1: 13, x2: 12, y2: 25 },
+  { type: 'arena',  x1: 13, y1: 13, x2: 25, y2: 25 },
+  { type: 'market', x1: 26, y1: 13, x2: 37, y2: 25 },
+  { type: 'arena',  x1: 38, y1: 13, x2: 50, y2: 25 },
+  { type: 'forest', x1: 51, y1: 13, x2: 63, y2: 25 },
+  // Row 2
+  { type: 'shrine', x1: 0,  y1: 26, x2: 12, y2: 37 },
+  { type: 'market', x1: 13, y1: 26, x2: 25, y2: 37 },
+  { type: 'spawn',  x1: 26, y1: 26, x2: 37, y2: 37 },
+  { type: 'market', x1: 38, y1: 26, x2: 50, y2: 37 },
+  { type: 'shrine', x1: 51, y1: 26, x2: 63, y2: 37 },
+  // Row 3
+  { type: 'forest', x1: 0,  y1: 38, x2: 12, y2: 50 },
+  { type: 'arena',  x1: 13, y1: 38, x2: 25, y2: 50 },
+  { type: 'market', x1: 26, y1: 38, x2: 37, y2: 50 },
+  { type: 'arena',  x1: 38, y1: 38, x2: 50, y2: 50 },
+  { type: 'forest', x1: 51, y1: 38, x2: 63, y2: 50 },
+  // Row 4
+  { type: 'forest', x1: 0,  y1: 51, x2: 12, y2: 63 },
+  { type: 'forest', x1: 13, y1: 51, x2: 25, y2: 63 },
+  { type: 'shrine', x1: 26, y1: 51, x2: 37, y2: 63 },
+  { type: 'forest', x1: 38, y1: 51, x2: 50, y2: 63 },
+  { type: 'forest', x1: 51, y1: 51, x2: 63, y2: 63 },
 ];
 
 function getTileType(x, y) {
@@ -404,7 +425,7 @@ export class WorldRenderer {
     const half = GRID_SIZE / 2;
 
     // Ground plane beneath the grid (below terrain valleys)
-    const groundGeo = new THREE.PlaneGeometry(50, 50);
+    const groundGeo = new THREE.PlaneGeometry(90, 90);
     const groundMat = new THREE.MeshStandardMaterial({ color: 0x241530, roughness: 0.95, metalness: 0.0 });
     const ground = new THREE.Mesh(groundGeo, groundMat);
     ground.rotation.x = -Math.PI / 2;
@@ -456,7 +477,7 @@ export class WorldRenderer {
   }
 
   createTerrain() {
-    const segs = 128;
+    const segs = 192;
     const geo = new THREE.PlaneGeometry(GRID_SIZE, GRID_SIZE, segs, segs);
     const posAttr = geo.attributes.position;
     const colors = new Float32Array(posAttr.count * 3);
@@ -500,6 +521,26 @@ export class WorldRenderer {
 
   addForestGrass() {
     const half = GRID_SIZE / 2;
+
+    // Count instances per material
+    const matCounts = new Array(GRASS_MATS.length).fill(0);
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (getTileType(x, y) !== 'forest') continue;
+        for (let i = 0; i < BLADES_PER_TILE; i++) {
+          const h1 = tileHash(x * 7 + i, y * 13 + i);
+          matCounts[Math.floor(h1 * GRASS_MATS.length)]++;
+        }
+      }
+    }
+
+    // Create one InstancedMesh per material (4 draw calls instead of ~6K)
+    const instances = GRASS_MATS.map((mat, idx) =>
+      new THREE.InstancedMesh(GRASS_GEO, mat, matCounts[idx])
+    );
+    const counters = new Array(GRASS_MATS.length).fill(0);
+    const dummy = new THREE.Object3D();
+
     for (let y = 0; y < GRID_SIZE; y++) {
       for (let x = 0; x < GRID_SIZE; x++) {
         if (getTileType(x, y) !== 'forest') continue;
@@ -510,22 +551,23 @@ export class WorldRenderer {
           const ox = (h1 - 0.5) * 0.85;
           const oz = (h2 - 0.5) * 0.85;
           const scale = 0.6 + h3 * 0.8;
-          const mat = GRASS_MATS[Math.floor(h1 * GRASS_MATS.length)];
-          const blade = new THREE.Mesh(GRASS_GEO, mat);
           const bwx = x - half + 0.5 + ox;
           const bwz = y - half + 0.5 + oz;
-          blade.position.set(
-            bwx,
-            getTerrainHeight(bwx, bwz) + 0.075 * scale,
-            bwz
-          );
-          blade.scale.set(scale, scale, scale);
-          blade.rotation.y = h2 * Math.PI * 2;
-          // Slight lean
-          blade.rotation.z = (h3 - 0.5) * 0.3;
-          this.gridGroup.add(blade);
+
+          dummy.position.set(bwx, getTerrainHeight(bwx, bwz) + 0.075 * scale, bwz);
+          dummy.scale.set(scale, scale, scale);
+          dummy.rotation.set(0, h2 * Math.PI * 2, (h3 - 0.5) * 0.3);
+          dummy.updateMatrix();
+
+          const matIdx = Math.floor(h1 * GRASS_MATS.length);
+          instances[matIdx].setMatrixAt(counters[matIdx]++, dummy.matrix);
         }
       }
+    }
+
+    for (const im of instances) {
+      im.instanceMatrix.needsUpdate = true;
+      this.gridGroup.add(im);
     }
   }
 
@@ -568,7 +610,7 @@ export class WorldRenderer {
   addShrineDecorations() {
     const half = GRID_SIZE / 2;
     // Central temple positions (grid coords)
-    const templeCenters = [{ x: 26, y: 5 }, { x: 26, y: 26 }];
+    const templeCenters = [{ x: 31, y: 6 }, { x: 6, y: 31 }, { x: 57, y: 31 }, { x: 31, y: 57 }];
 
     for (const tc of templeCenters) {
       const temple = createTemple(2.5);
@@ -684,9 +726,9 @@ export class WorldRenderer {
   addSpawnDecorations() {
     const half = GRID_SIZE / 2;
 
-    // Central fountain at spawn center (15.5, 15.5 in grid coords)
+    // Central fountain at spawn center (31.5, 31.5 in grid coords)
     const fountain = createFountain(1.5);
-    const fwx = 15.5 - half + 0.5, fwz = 15.5 - half + 0.5;
+    const fwx = 31.5 - half + 0.5, fwz = 31.5 - half + 0.5;
     fountain.position.set(fwx, getTerrainHeight(fwx, fwz), fwz);
     this.gridGroup.add(fountain);
 
@@ -694,7 +736,7 @@ export class WorldRenderer {
       for (let x = 0; x < GRID_SIZE; x++) {
         if (getTileType(x, y) !== 'spawn') continue;
         // Skip tiles near fountain center (±1)
-        if (Math.abs(x - 15.5) <= 1 && Math.abs(y - 15.5) <= 1) continue;
+        if (Math.abs(x - 31.5) <= 1 && Math.abs(y - 31.5) <= 1) continue;
 
         const h = tileHash(x * 199, y * 263);
         const wx = x - half + 0.5;
@@ -794,7 +836,7 @@ export class WorldRenderer {
     const half = GRID_SIZE / 2;
     const step = 1; // sample every tile
 
-    const boundaries = [11, 21];
+    const boundaries = [13, 26, 38, 51];
     for (const b of boundaries) {
       // Vertical line (x = b)
       const vPoints = [];
@@ -818,15 +860,36 @@ export class WorldRenderer {
 
   addZoneLabels() {
     const labels = [
-      { text: 'SPAWN', x: 15.5, y: 15.5, color: '#8888cc' },
-      { text: 'FOREST', x: 5, y: 5, color: '#55aa55' },
-      { text: 'FOREST', x: 15.5, y: 5, color: '#55aa55' },
-      { text: 'FOREST', x: 5, y: 26, color: '#55aa55' },
-      { text: 'FOREST', x: 15.5, y: 26, color: '#55aa55' },
-      { text: 'MARKET', x: 5, y: 15.5, color: '#ccaa44' },
-      { text: 'ARENA', x: 26, y: 15.5, color: '#cc4444' },
-      { text: 'SHRINE', x: 26, y: 5, color: '#ccaa44' },
-      { text: 'SHRINE', x: 26, y: 26, color: '#ccaa44' },
+      // Row 0
+      { text: 'FOREST', x: 6,    y: 6,    color: '#55aa55' },
+      { text: 'FOREST', x: 19,   y: 6,    color: '#55aa55' },
+      { text: 'SHRINE', x: 31.5, y: 6,    color: '#ccaa44' },
+      { text: 'FOREST', x: 44,   y: 6,    color: '#55aa55' },
+      { text: 'FOREST', x: 57,   y: 6,    color: '#55aa55' },
+      // Row 1
+      { text: 'FOREST', x: 6,    y: 19,   color: '#55aa55' },
+      { text: 'ARENA',  x: 19,   y: 19,   color: '#cc4444' },
+      { text: 'MARKET', x: 31.5, y: 19,   color: '#ccaa44' },
+      { text: 'ARENA',  x: 44,   y: 19,   color: '#cc4444' },
+      { text: 'FOREST', x: 57,   y: 19,   color: '#55aa55' },
+      // Row 2
+      { text: 'SHRINE', x: 6,    y: 31.5, color: '#ccaa44' },
+      { text: 'MARKET', x: 19,   y: 31.5, color: '#ccaa44' },
+      { text: 'SPAWN',  x: 31.5, y: 31.5, color: '#8888cc' },
+      { text: 'MARKET', x: 44,   y: 31.5, color: '#ccaa44' },
+      { text: 'SHRINE', x: 57,   y: 31.5, color: '#ccaa44' },
+      // Row 3
+      { text: 'FOREST', x: 6,    y: 44,   color: '#55aa55' },
+      { text: 'ARENA',  x: 19,   y: 44,   color: '#cc4444' },
+      { text: 'MARKET', x: 31.5, y: 44,   color: '#ccaa44' },
+      { text: 'ARENA',  x: 44,   y: 44,   color: '#cc4444' },
+      { text: 'FOREST', x: 57,   y: 44,   color: '#55aa55' },
+      // Row 4
+      { text: 'FOREST', x: 6,    y: 57,   color: '#55aa55' },
+      { text: 'FOREST', x: 19,   y: 57,   color: '#55aa55' },
+      { text: 'SHRINE', x: 31.5, y: 57,   color: '#ccaa44' },
+      { text: 'FOREST', x: 44,   y: 57,   color: '#55aa55' },
+      { text: 'FOREST', x: 57,   y: 57,   color: '#55aa55' },
     ];
 
     for (const label of labels) {
