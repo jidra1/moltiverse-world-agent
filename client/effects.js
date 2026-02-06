@@ -5,6 +5,12 @@ import { getTerrainHeight } from './world-renderer.js';
 
 const GRID_SIZE = 64;
 
+// Shared geometries for effects (created once)
+const SPARKLE_GEO = new THREE.SphereGeometry(0.06, 6, 6);
+const EXPLOSION_GEO = new THREE.SphereGeometry(0.08, 6, 6);
+const COMBAT_RING_GEO = new THREE.RingGeometry(0.1, 0.6, 16);
+const ENTER_RING_GEO = new THREE.RingGeometry(0.05, 0.4, 24);
+
 export class EffectsManager {
   constructor(scene) {
     this.scene = scene;
@@ -62,9 +68,8 @@ export class EffectsManager {
 
   // --- Combat Flash ---
   addCombatFlash(x, y) {
-    const geo = new THREE.RingGeometry(0.1, 0.6, 16);
     const mat = new THREE.MeshStandardMaterial({ color: 0xff3333, transparent: true, opacity: 1, side: THREE.DoubleSide, emissive: 0xff2200, emissiveIntensity: 2.0, roughness: 0.5, metalness: 0.0 });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(COMBAT_RING_GEO, mat);
     const pos = this.toWorld(x, y);
     mesh.position.set(pos.x, pos.y + 0.5, pos.z);
     mesh.rotation.x = -Math.PI / 2;
@@ -90,9 +95,8 @@ export class EffectsManager {
     const pos = this.toWorld(x, y);
 
     for (let i = 0; i < 5; i++) {
-      const geo = new THREE.SphereGeometry(0.06, 6, 6);
       const mat = new THREE.MeshStandardMaterial({ color, transparent: true, opacity: 1, emissive: color, emissiveIntensity: 1.5, roughness: 0.5, metalness: 0.0 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(SPARKLE_GEO, mat);
 
       const offsetX = (Math.random() - 0.5) * 0.6;
       const offsetZ = (Math.random() - 0.5) * 0.6;
@@ -124,9 +128,8 @@ export class EffectsManager {
     const pos = this.toWorld(x, y);
 
     for (let i = 0; i < 12; i++) {
-      const geo = new THREE.SphereGeometry(0.08, 6, 6);
       const mat = new THREE.MeshStandardMaterial({ color: 0xff2222, transparent: true, opacity: 1, emissive: 0xff2200, emissiveIntensity: 3.0, roughness: 0.5, metalness: 0.0 });
-      const mesh = new THREE.Mesh(geo, mat);
+      const mesh = new THREE.Mesh(EXPLOSION_GEO, mat);
 
       mesh.position.set(pos.x, pos.y + 0.5, pos.z);
       const angle = (i / 12) * Math.PI * 2;
@@ -153,9 +156,8 @@ export class EffectsManager {
 
   // --- Enter Glow ---
   addEnterGlow(x, y) {
-    const geo = new THREE.RingGeometry(0.05, 0.4, 24);
     const mat = new THREE.MeshStandardMaterial({ color: 0x44ff88, transparent: true, opacity: 1, side: THREE.DoubleSide, emissive: 0x44ff88, emissiveIntensity: 1.5, roughness: 0.5, metalness: 0.0 });
-    const mesh = new THREE.Mesh(geo, mat);
+    const mesh = new THREE.Mesh(ENTER_RING_GEO, mat);
     const pos = this.toWorld(x, y);
     mesh.position.set(pos.x, pos.y + 0.1, pos.z);
     mesh.rotation.x = -Math.PI / 2;
@@ -183,7 +185,7 @@ export class EffectsManager {
         this.scene.remove(effect.mesh);
         if (effect.mesh.material?.map) effect.mesh.material.map.dispose();
         if (effect.mesh.material) effect.mesh.material.dispose();
-        if (effect.mesh.geometry) effect.mesh.geometry.dispose();
+        // Don't dispose shared geometries
         this.effects.splice(i, 1);
       }
     }

@@ -503,16 +503,25 @@ function getBlendedZoneColor(worldX, worldZ) {
 const WALL_GEO = new THREE.BoxGeometry(0.9, 0.6, 0.9);
 const WALL_MAT = new THREE.MeshStandardMaterial({ color: 0x8a7a5a, roughness: 0.7, metalness: 0.1 });
 
+// --- Shared resource materials (created once, reused forever) ---
+const STONE_GEO = new THREE.BoxGeometry(0.2, 0.18, 0.2);
+const GOLD_GEO = new THREE.OctahedronGeometry(0.12);
+const STONE_MAT = new THREE.MeshStandardMaterial({ color: 0x808080, roughness: 0.7, metalness: 0.1 });
+const GOLD_MAT = new THREE.MeshStandardMaterial({ color: 0xFFD700, roughness: 0.3, metalness: 0.6, emissive: 0x664400, emissiveIntensity: 0.4 });
+
 export class WorldRenderer {
   constructor(scene) {
     this.scene = scene;
-    this.resourceMeshes = new Map(); // key: "x,y" -> mesh
+    this.resourceMeshes = new Map(); // key: "x,y" -> mesh (stone/gold only)
     this.wallMeshes = new Map(); // key: "x,y" -> mesh
     this.gridGroup = new THREE.Group();
     // Local resource count map — default 3 for resource tiles
     this.resourceCounts = new Map();
     // Invisible plane for raycasting
     this.raycastPlane = null;
+    // Tree InstancedMeshes — rebuilt when resource counts change
+    this.treeInstances = null; // { trunks: InstancedMesh, foliage: InstancedMesh[] }
+    this.treeDirty = true;
     scene.add(this.gridGroup);
   }
 
@@ -1010,24 +1019,37 @@ export class WorldRenderer {
     for (const tile of activeTiles) {
       if (tile.resource) {
         const key = `${tile.x},${tile.y}`;
-        this.resourceCounts.set(key, { resource: tile.resource, count: tile.resourceCount });
+        const prev = this.resourceCounts.get(key);
+        const newCount = tile.resourceCount;
+        if (!prev || prev.count !== newCount) {
+          this.resourceCounts.set(key, { resource: tile.resource, count: newCount });
+          if (tile.resource === 'wood') {
+            this.treeDirty = true;
+          } else {
+            // Differential update for stone/gold
+            this._updateSingleResource(key, tile.x, tile.y, tile.resource, newCount);
+          }
+        }
       }
     }
-    this.renderResources();
-    this.renderWalls(activeTiles);
+    // Rebuild tree instances only when counts changed
+    if (this.treeDirty) {
+      this._rebuildTreeInstances();
+      this.treeDirty = false;
+    }
+    this._renderWalls(activeTiles);
   }
 
-  renderWalls(activeTiles) {
-    // Clear existing wall meshes
-    for (const [, mesh] of this.wallMeshes) {
-      this.gridGroup.remove(mesh);
-    }
-    this.wallMeshes.clear();
-
+  _renderWalls(activeTiles) {
+    // Track which walls are current
+    const currentWalls = new Set();
     const half = GRID_SIZE / 2;
+
     for (const tile of activeTiles) {
       if (!tile.wall) continue;
       const key = `${tile.x},${tile.y}`;
+      currentWalls.add(key);
+      if (this.wallMeshes.has(key)) continue; // already rendered
       const wx = tile.x - half + 0.5;
       const wz = tile.y - half + 0.5;
       const wall = new THREE.Mesh(WALL_GEO, WALL_MAT);
@@ -1037,85 +1059,158 @@ export class WorldRenderer {
       this.gridGroup.add(wall);
       this.wallMeshes.set(key, wall);
     }
+    // Remove decayed walls
+    for (const [key, mesh] of this.wallMeshes) {
+      if (!currentWalls.has(key)) {
+        this.gridGroup.remove(mesh);
+        this.wallMeshes.delete(key);
+      }
+    }
+  }
+
+  _updateSingleResource(key, x, y, resource, count) {
+    // Remove old mesh if exists
+    const old = this.resourceMeshes.get(key);
+    if (old) {
+      this.gridGroup.remove(old);
+      old.geometry?.dispose(); // geo is shared, but dispose is no-op for shared
+    }
+
+    if (count <= 0) { this.resourceMeshes.delete(key); return; }
+    if ((x + y) % 3 !== 0) return;
+    if (resource === 'gold' && getTileType(x, y) === 'shrine') return;
+
+    const baseX = x - GRID_SIZE / 2 + 0.5 + 0.3;
+    const baseZ = y - GRID_SIZE / 2 + 0.5 + 0.3;
+    const geo = resource === 'gold' ? GOLD_GEO : STONE_GEO;
+    const mat = resource === 'gold' ? GOLD_MAT : STONE_MAT;
+    const mesh = new THREE.Mesh(geo, mat);
+    const baseY = resource === 'gold' ? 0.15 : 0.1;
+    mesh.position.set(baseX, getTerrainHeight(baseX, baseZ) + baseY + 0.04 * count, baseZ);
+    if (resource === 'gold') {
+      mesh.scale.setScalar(0.8 + count * 0.15);
+    } else {
+      mesh.scale.set(1, count * 0.5, 1);
+    }
+    this.gridGroup.add(mesh);
+    this.resourceMeshes.set(key, mesh);
+  }
+
+  _rebuildTreeInstances() {
+    // Remove old tree instanced meshes
+    if (this.treeInstances) {
+      this.gridGroup.remove(this.treeInstances.trunks);
+      this.treeInstances.trunks.dispose();
+      for (const im of this.treeInstances.foliage) {
+        this.gridGroup.remove(im);
+        im.dispose();
+      }
+      this.treeInstances = null;
+    }
+
+    // First pass: count trees per foliage material + total trunks
+    let totalTrunks = 0;
+    const foliageCounts = new Array(FOLIAGE_MATS.length).fill(0);
+
+    for (const [key, data] of this.resourceCounts) {
+      if (data.resource !== 'wood' || data.count <= 0) continue;
+      const [xs, ys] = key.split(',');
+      const x = parseInt(xs), y = parseInt(ys);
+      if ((x + y) % 3 !== 0) continue;
+      const h = tileHash(x, y);
+      if (h < 0.2) continue;
+      const treeCount = h < 0.5 ? 1 : h < 0.8 ? 2 : 3;
+      totalTrunks += treeCount;
+      for (let i = 0; i < treeCount; i++) {
+        const matIdx = (Math.floor(h * 97) + i) % FOLIAGE_MATS.length;
+        foliageCounts[matIdx]++;
+      }
+    }
+
+    if (totalTrunks === 0) return;
+
+    // Create instanced meshes
+    const trunkIM = new THREE.InstancedMesh(TRUNK_GEO, TRUNK_MAT, totalTrunks);
+    const foliageIMs = FOLIAGE_MATS.map((mat, idx) =>
+      new THREE.InstancedMesh(FOLIAGE_GEO, mat, foliageCounts[idx])
+    );
+    const trunkIdx = { i: 0 };
+    const foliageIdxs = new Array(FOLIAGE_MATS.length).fill(0);
+    const dummy = new THREE.Object3D();
+
+    const OFFSETS = [
+      [[0, 0]],
+      [[-0.12, -0.08], [0.12, 0.08]],
+      [[-0.12, -0.1], [0.12, -0.05], [0, 0.12]],
+    ];
+
+    // Second pass: fill instance matrices
+    for (const [key, data] of this.resourceCounts) {
+      if (data.resource !== 'wood' || data.count <= 0) continue;
+      const [xs, ys] = key.split(',');
+      const x = parseInt(xs), y = parseInt(ys);
+      if ((x + y) % 3 !== 0) continue;
+
+      const h = tileHash(x, y);
+      if (h < 0.2) continue;
+      const count = Math.min(data.count, 5);
+      const treeCount = h < 0.5 ? 1 : h < 0.8 ? 2 : 3;
+      const positions = OFFSETS[treeCount - 1];
+      const baseX = x - GRID_SIZE / 2 + 0.5 + 0.3;
+      const baseZ = y - GRID_SIZE / 2 + 0.5 + 0.3;
+      const baseY = getTerrainHeight(baseX, baseZ);
+
+      for (let i = 0; i < treeCount; i++) {
+        const s = TREE_SCALE[count] * (0.55 + 0.9 * tileHash(x + i, y + i * 7));
+        const matIdx = (Math.floor(h * 97) + i) % FOLIAGE_MATS.length;
+        const rotY = tileHash(x * 3 + i, y * 5) * Math.PI * 2;
+        const tx = baseX + positions[i][0];
+        const tz = baseZ + positions[i][1];
+
+        // Trunk
+        dummy.position.set(tx, baseY + 0.45 * s, tz);
+        dummy.scale.setScalar(s);
+        dummy.rotation.set(0, rotY, 0);
+        dummy.updateMatrix();
+        trunkIM.setMatrixAt(trunkIdx.i++, dummy.matrix);
+
+        // Foliage
+        dummy.position.set(tx, baseY + (0.9 + 0.35) * s, tz);
+        dummy.updateMatrix();
+        foliageIMs[matIdx].setMatrixAt(foliageIdxs[matIdx]++, dummy.matrix);
+      }
+    }
+
+    trunkIM.instanceMatrix.needsUpdate = true;
+    this.gridGroup.add(trunkIM);
+
+    for (const im of foliageIMs) {
+      im.instanceMatrix.needsUpdate = true;
+      this.gridGroup.add(im);
+    }
+
+    this.treeInstances = { trunks: trunkIM, foliage: foliageIMs };
   }
 
   renderResources() {
-    // Clear existing
+    // Full rebuild — called once at init, then differential updates take over
+    // Clear stone/gold meshes
     for (const [, mesh] of this.resourceMeshes) {
       this.gridGroup.remove(mesh);
     }
     this.resourceMeshes.clear();
 
-    // Geometries for non-wood resources
-    const geos = {
-      stone: new THREE.BoxGeometry(0.2, 0.18, 0.2),             // blocks
-      gold: new THREE.OctahedronGeometry(0.12),                  // gems
-    };
-
-    // Only render a sparse set for visual effect (every 3rd tile)
+    // Rebuild stone/gold
     for (const [key, data] of this.resourceCounts) {
-      if (data.count <= 0) continue;
+      if (data.resource === 'wood' || data.count <= 0) continue;
       const [xs, ys] = key.split(',');
       const x = parseInt(xs), y = parseInt(ys);
-
-      // Render every 3rd tile to keep scene light
-      if ((x + y) % 3 !== 0) continue;
-
-      // Skip gold octahedrons in shrine zones (temples/dunes provide the visual)
-      if (data.resource === 'gold' && getTileType(x, y) === 'shrine') continue;
-
-      const count = Math.min(data.count, 5);
-      const baseX = x - GRID_SIZE / 2 + 0.5 + 0.3;
-      const baseZ = y - GRID_SIZE / 2 + 0.5 + 0.3;
-
-      if (data.resource === 'wood') {
-        const h = tileHash(x, y);
-        // ~20% of tiles stay empty for natural gaps
-        if (h < 0.2) continue;
-        // Tile hash picks 1, 2, or 3 trees (~50% / ~30% / ~20%)
-        const treeCount = h < 0.5 ? 1 : h < 0.8 ? 2 : 3;
-        const OFFSETS = [
-          [[0, 0]],
-          [[-0.12, -0.08], [0.12, 0.08]],
-          [[-0.12, -0.1], [0.12, -0.05], [0, 0.12]],
-        ];
-        const positions = OFFSETS[treeCount - 1];
-        const group = new THREE.Group();
-        for (let i = 0; i < treeCount; i++) {
-          const s = TREE_SCALE[count] * (0.55 + 0.9 * tileHash(x + i, y + i * 7));
-          const matIdx = (Math.floor(h * 97) + i) % FOLIAGE_MATS.length;
-          const rotY = tileHash(x * 3 + i, y * 5) * Math.PI * 2;
-          const t = createTree(s, FOLIAGE_MATS[matIdx], rotY);
-          t.position.set(positions[i][0], 0, positions[i][1]);
-          group.add(t);
-        }
-        group.position.set(baseX, getTerrainHeight(baseX, baseZ), baseZ);
-        this.gridGroup.add(group);
-        this.resourceMeshes.set(key, group);
-      } else {
-        // Stone / gold
-        const color = RESOURCE_COLORS[data.resource] || 0xffffff;
-        const geo = geos[data.resource] || geos.stone;
-        const isGold = data.resource === 'gold';
-        const material = new THREE.MeshStandardMaterial({
-          color,
-          roughness: isGold ? 0.3 : 0.7,
-          metalness: isGold ? 0.6 : 0.1,
-          emissive: isGold ? 0x664400 : 0x000000,
-          emissiveIntensity: isGold ? 0.4 : 0,
-        });
-        const mesh = new THREE.Mesh(geo, material);
-        const baseY = data.resource === 'gold' ? 0.15 : 0.1;
-        mesh.position.set(baseX, getTerrainHeight(baseX, baseZ) + baseY + 0.04 * count, baseZ);
-        if (data.resource === 'gold') {
-          mesh.scale.setScalar(0.8 + count * 0.15);
-        } else {
-          mesh.scale.set(1, count * 0.5, 1);
-        }
-        this.gridGroup.add(mesh);
-        this.resourceMeshes.set(key, mesh);
-      }
+      this._updateSingleResource(key, x, y, data.resource, data.count);
     }
+
+    // Rebuild trees
+    this.treeDirty = false;
+    this._rebuildTreeInstances();
   }
 
   getTileAt(x, y) {

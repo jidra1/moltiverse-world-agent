@@ -195,16 +195,10 @@ export class AgentRenderer {
         // Update HP bar
         updateHpBar(data.labelCtx, data.labelTexture, agent.hp || 0, 100);
 
-        // Update opacity/scale based on HP
+        // Update opacity/scale based on HP (set on shared material, no traverse needed)
         const hpRatio = Math.max(0, (agent.hp || 0) / 100);
-        const opacity = 0.4 + hpRatio * 0.6;
-        data.lobster.traverse(child => {
-          if (child.isMesh && child.material.transparent !== undefined) {
-            child.material.opacity = opacity;
-          }
-        });
-        const scale = 0.7 + hpRatio * 0.3;
-        data.lobster.scale.setScalar(scale);
+        data.material.opacity = 0.4 + hpRatio * 0.6;
+        data.lobster.scale.setScalar(0.7 + hpRatio * 0.3);
       } else {
         // New agent — clone lobster template and apply agent material
         const color = this.getAgentColor(agent.id);
@@ -244,16 +238,10 @@ export class AgentRenderer {
         sprite.scale.set(2.5, 1.25, 1);
         this.agentGroup.add(sprite);
 
-        // Subtle point light under agent
-        const light = new THREE.PointLight(color, 0.4, 3);
-        light.position.set(worldX, 0.55, worldZ);
-        this.agentGroup.add(light);
-
         this.agentMeshes.set(agent.id, {
           lobster,
           material,
           sprite,
-          light,
           labelCtx: ctx,
           labelTexture: texture,
           targetPos: new THREE.Vector3(worldX, getTerrainHeight(worldX, worldZ) + 0.25, worldZ),
@@ -268,8 +256,6 @@ export class AgentRenderer {
       if (!currentIds.has(id)) {
         this.agentGroup.remove(data.lobster);
         this.agentGroup.remove(data.sprite);
-        this.agentGroup.remove(data.light);
-        // Dispose all child geometries/materials
         data.lobster.traverse(child => {
           if (child.isMesh) {
             child.geometry.dispose();
@@ -277,7 +263,6 @@ export class AgentRenderer {
           }
         });
         data.material.dispose();
-        data.light.dispose();
         data.labelTexture.dispose();
         data.sprite.material.dispose();
         this.agentMeshes.delete(id);
@@ -315,11 +300,6 @@ export class AgentRenderer {
       data.sprite.position.x = data.lobster.position.x;
       data.sprite.position.z = data.lobster.position.z;
       data.sprite.position.y = data.lobster.position.y + 1.0;
-
-      // Light follows lobster
-      data.light.position.x = data.lobster.position.x;
-      data.light.position.z = data.lobster.position.z;
-      data.light.position.y = data.lobster.position.y + 0.3;
     }
   }
 }
