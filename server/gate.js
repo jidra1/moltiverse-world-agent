@@ -1,12 +1,16 @@
-// Entry gate — viem-based native MON balance + signature verification on Monad testnet
-// Falls back to auto-approve when no wallet is provided (dev mode)
+// Entry gate — MON payment verification on Monad mainnet
+// Agents must send MON to the gate wallet and provide txHash as proof
 
-import { createPublicClient, http, verifyMessage, defineChain } from 'viem';
+import { createPublicClient, http, defineChain, formatEther } from 'viem';
 
 const enteredAgents = new Set();
+const usedTxHashes = new Set(); // Prevent tx reuse
 
-// Native MON balance check — no token address needed (MON is the native gas token)
-const REQUIRED_BALANCE = 100_000_000_000_000_000n; // 0.1 MON (18 decimals)
+// Gate wallet — agents send entry fee here
+const GATE_WALLET = '0x96812d3c24B64b32DF830fDB6d38F696CBdC9935';
+
+// Entry fee: 0.01 MON (18 decimals)
+const ENTRY_FEE = 10_000_000_000_000_000n; // 0.01 MON
 
 // Monad Mainnet chain config
 const monadMainnet = defineChain({
@@ -32,65 +36,105 @@ try {
     transport: http(MONAD_RPC_URL),
   });
 } catch (e) {
-  console.warn('Viem client init failed (chain may not be available):', e.message);
+  console.warn('Viem client init failed:', e.message);
   publicClient = null;
 }
 
 async function verifyEntry(agentId, proof) {
+  // Check if agent already entered
   if (enteredAgents.has(agentId)) {
     return { allowed: false, reason: 'Agent already entered' };
   }
 
+  const txHash = proof?.txHash;
   const walletAddress = proof?.walletAddress;
-  const signature = proof?.signature;
 
-  let verified = false;
-
-  if (walletAddress && publicClient) {
-    // Verify wallet ownership via signed message
-    if (signature) {
-      try {
-        const valid = await verifyMessage({
-          address: walletAddress,
-          message: `moltirealm-enter:${agentId}`,
-          signature,
-        });
-        if (!valid) {
-          return { allowed: false, reason: 'Invalid signature — wallet ownership not proven.' };
-        }
-      } catch (err) {
-        return { allowed: false, reason: `Signature verification failed: ${err.message}` };
-      }
-    }
-
-    // Check native MON balance
-    try {
-      const balance = await publicClient.getBalance({ address: walletAddress });
-      if (balance < REQUIRED_BALANCE) {
-        return {
-          allowed: false,
-          reason: `Insufficient MON balance. Have ${balance}, need at least ${REQUIRED_BALANCE} (0.1 MON).`
-        };
-      }
-      console.log(`Gate: verified ${walletAddress} — balance ${balance} MON (wei)`);
-      verified = true;
-    } catch (err) {
-      if (err.message?.includes('fetch') || err.message?.includes('ECONNREFUSED') || err.message?.includes('timeout')) {
-        console.warn(`Gate: Monad RPC unreachable — ${err.message}. Falling back to dev mode.`);
-      } else {
-        console.warn(`Gate: on-chain verification failed — ${err.message}. Falling back to dev mode.`);
-      }
-      // Fall through to dev mode approval (verified stays false)
-    }
+  // Dev mode — no proof provided, allow with limited access
+  if (!txHash) {
+    console.log(`Gate: ${agentId} entering in DEV MODE (no txHash provided)`);
+    enteredAgents.add(agentId);
+    return { 
+      allowed: true, 
+      verified: false, 
+      walletAddress: walletAddress || null,
+      devMode: true,
+      message: 'Dev mode: provide txHash of 0.01 MON payment for full access'
+    };
   }
 
-  // Allow entry — verified only when wallet + signature + balance all passed
-  enteredAgents.add(agentId);
-  return { allowed: true, verified, walletAddress: walletAddress || null };
+  // Check if tx already used
+  if (usedTxHashes.has(txHash.toLowerCase())) {
+    return { allowed: false, reason: 'Transaction hash already used for entry' };
+  }
+
+  // Verify transaction on-chain
+  if (!publicClient) {
+    console.warn('Gate: No RPC client, allowing dev mode');
+    enteredAgents.add(agentId);
+    return { allowed: true, verified: false, walletAddress, devMode: true };
+  }
+
+  try {
+    // Fetch transaction
+    const tx = await publicClient.getTransaction({ hash: txHash });
+    
+    if (!tx) {
+      return { allowed: false, reason: 'Transaction not found on Monad' };
+    }
+
+    // Verify recipient is our gate wallet
+    if (tx.to?.toLowerCase() !== GATE_WALLET.toLowerCase()) {
+      return { 
+        allowed: false, 
+        reason: `Invalid recipient. Send to ${GATE_WALLET}, got ${tx.to}` 
+      };
+    }
+
+    // Verify amount is >= entry fee
+    if (tx.value < ENTRY_FEE) {
+      return { 
+        allowed: false, 
+        reason: `Insufficient payment. Need ${formatEther(ENTRY_FEE)} MON, got ${formatEther(tx.value)} MON` 
+      };
+    }
+
+    // Fetch receipt to verify success
+    const receipt = await publicClient.getTransactionReceipt({ hash: txHash });
+    
+    if (!receipt || receipt.status !== 'success') {
+      return { allowed: false, reason: 'Transaction failed or pending' };
+    }
+
+    // All checks passed — mark tx as used and allow entry
+    usedTxHashes.add(txHash.toLowerCase());
+    enteredAgents.add(agentId);
+    
+    console.log(`Gate: ${agentId} VERIFIED — paid ${formatEther(tx.value)} MON (tx: ${txHash.slice(0, 10)}...)`);
+    
+    return { 
+      allowed: true, 
+      verified: true, 
+      walletAddress: tx.from,
+      paidAmount: formatEther(tx.value),
+      txHash
+    };
+
+  } catch (err) {
+    console.warn(`Gate: RPC error — ${err.message}. Allowing dev mode.`);
+    enteredAgents.add(agentId);
+    return { 
+      allowed: true, 
+      verified: false, 
+      walletAddress, 
+      devMode: true,
+      error: err.message 
+    };
+  }
 }
 
 function resetGate() {
   enteredAgents.clear();
+  // Note: we don't clear usedTxHashes to prevent replay attacks across restarts
 }
 
 function loadEnteredAgents(agentIds) {
@@ -103,4 +147,11 @@ function removeEnteredAgent(agentId) {
   enteredAgents.delete(agentId);
 }
 
-export { verifyEntry, resetGate, loadEnteredAgents, removeEnteredAgent };
+// Export gate wallet address for docs/UI
+const getGateInfo = () => ({
+  wallet: GATE_WALLET,
+  entryFee: formatEther(ENTRY_FEE) + ' MON',
+  entryFeeWei: ENTRY_FEE.toString()
+});
+
+export { verifyEntry, resetGate, loadEnteredAgents, removeEnteredAgent, getGateInfo };

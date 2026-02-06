@@ -14,7 +14,7 @@ import {
 import { processActionQueue, regenerateHp, processHunger } from './actions.js';
 import { regenerateResources, cleanExpiredTrades, getPendingTrade } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
-import { loadEnteredAgents, removeEnteredAgent } from './gate.js';
+import { loadEnteredAgents, removeEnteredAgent, getGateInfo } from './gate.js';
 import {
   initTreasury,
   isTreasuryEnabled,
@@ -129,6 +129,11 @@ app.get('/api/state', (req, res) => {
     // Spectator mode: full state
     res.json(getWorldSnapshot());
   }
+});
+
+// Get gate info (entry fee, wallet address)
+app.get('/api/gate', (req, res) => {
+  res.json(getGateInfo());
 });
 
 // Get agent status
