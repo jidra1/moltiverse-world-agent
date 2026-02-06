@@ -68,6 +68,9 @@ export class UI {
   }
 
   addLogEntry(event) {
+    // Skip spammy/internal events that aren't interesting for viewers
+    if (['hunger', 'regen', 'tick'].includes(event.type)) return;
+
     const entry = document.createElement('div');
     entry.className = `log-entry log-${event.type}`;
     entry.innerHTML = `<span class="time">[${event.tick || '?'}]</span> ${formatEvent(event)}`;
