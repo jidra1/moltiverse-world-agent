@@ -3,3 +3,4 @@ world-state.json
 .DS_Store
 client/dist/
 plan.md
+.env

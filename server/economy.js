@@ -7,6 +7,9 @@ const RESOURCE_REGEN_INTERVAL = 10; // ticks
 const RESOURCE_SCORE = { wood: 5, stone: 10, gold: 25 };
 const VALID_RESOURCES = new Set(['wood', 'stone', 'gold']);
 
+// $REALM token conversion rate: 1 gold = 100 REALM tokens (in wei: 100 * 10^18)
+const GOLD_TO_REALM_RATE = 100n * (10n ** 18n);
+
 // --- Pending Trades ---
 // Key: targetId, Value: { from, targetId, offer, request, tick }
 const pendingTrades = new Map();
@@ -225,4 +228,57 @@ function cleanExpiredTrades(tick) {
   }
 }
 
-export { regenerateResources, gatherResource, proposeTrade, acceptTrade, rejectTrade, getPendingTrade, cleanExpiredTrades };
+function convertGoldToRealm(world, agentId, amount) {
+  const agent = world.agents[agentId];
+  if (!agent || !agent.alive) {
+    return { success: false, reason: 'Agent not found or dead' };
+  }
+
+  // Validate amount
+  if (typeof amount !== 'number' || !Number.isInteger(amount) || amount <= 0) {
+    return { success: false, reason: 'Amount must be a positive integer' };
+  }
+
+  // Check gold inventory
+  if ((agent.inventory.gold || 0) < amount) {
+    return { success: false, reason: `Insufficient gold: have ${agent.inventory.gold || 0}, need ${amount}` };
+  }
+
+  // Deduct gold
+  agent.inventory.gold -= amount;
+
+  // Add REALM balance (convert to BigInt string for JSON safety)
+  const realmAmount = BigInt(amount) * GOLD_TO_REALM_RATE;
+  const currentBalance = BigInt(agent.realmBalance || '0');
+  const newBalance = currentBalance + realmAmount;
+  agent.realmBalance = newBalance.toString();
+
+  logEvent(world, {
+    type: 'convert',
+    agent: agentId,
+    goldSpent: amount,
+    realmReceived: realmAmount.toString(),
+    x: agent.x,
+    y: agent.y
+  });
+
+  return {
+    success: true,
+    goldSpent: amount,
+    realmReceived: realmAmount.toString(),
+    inventory: { ...agent.inventory },
+    realmBalance: agent.realmBalance
+  };
+}
+
+export {
+  regenerateResources,
+  gatherResource,
+  proposeTrade,
+  acceptTrade,
+  rejectTrade,
+  getPendingTrade,
+  cleanExpiredTrades,
+  convertGoldToRealm,
+  GOLD_TO_REALM_RATE
+};

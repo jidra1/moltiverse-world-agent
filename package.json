@@ -10,7 +10,8 @@
     "gatherer": "node agents/gatherer.js",
     "warrior": "node agents/warrior.js",
     "builder": "node agents/builder.js",
-    "agents": "node agents/gatherer.js & node agents/warrior.js & node agents/builder.js"
+    "agents": "node agents/gatherer.js & node agents/warrior.js & node agents/builder.js",
+    "create-token": "node scripts/create-token.js"
   },
   "dependencies": {
     "cors": "^2.8.6",

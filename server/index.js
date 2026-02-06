@@ -15,6 +15,13 @@ import { processActionQueue, regenerateHp, processHunger } from './actions.js';
 import { regenerateResources, cleanExpiredTrades, getPendingTrade } from './economy.js';
 import { saveWorld, loadWorld } from './persistence.js';
 import { loadEnteredAgents, removeEnteredAgent } from './gate.js';
+import {
+  initTreasury,
+  isTreasuryEnabled,
+  isTokenGraduated,
+  getTreasuryAddress,
+  transferRealm
+} from './treasury.js';
 
 const AGENT_INSTRUCTIONS = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
 
@@ -32,6 +39,9 @@ if (loaded) {
   loadEnteredAgents(Object.keys(world.agents));
 }
 console.log(loaded ? 'World restored from save' : 'Fresh world initialized');
+
+// Initialize treasury (token economy)
+initTreasury();
 
 // Express setup
 const app = express();
@@ -231,6 +241,101 @@ app.get('/api/events', (req, res) => {
 // Agent instructions (machine-readable)
 app.get('/api/instructions', (req, res) => {
   res.type('text/markdown').send(AGENT_INSTRUCTIONS);
+});
+
+// Token economy info
+app.get('/api/token-info', async (req, res) => {
+  const enabled = isTreasuryEnabled();
+  if (!enabled) {
+    return res.json({ enabled: false });
+  }
+
+  const treasuryAddress = getTreasuryAddress();
+  const tokenAddress = process.env.REALM_TOKEN_ADDRESS;
+  const graduated = await isTokenGraduated();
+
+  res.json({
+    enabled: true,
+    tokenAddress,
+    treasuryAddress,
+    graduated
+  });
+});
+
+// Withdraw $REALM tokens
+app.post('/api/withdraw', async (req, res) => {
+  const { agentId, amount } = req.body;
+
+  // Validate treasury enabled
+  if (!isTreasuryEnabled()) {
+    return res.status(503).json({ error: 'Token economy not enabled' });
+  }
+
+  // Validate agent exists
+  const agent = world.agents[agentId];
+  if (!agent) {
+    return res.status(404).json({ error: 'Agent not in world' });
+  }
+
+  // Validate agent is verified
+  if (!agent.verified) {
+    return res.status(403).json({ error: 'Wallet verification required to withdraw' });
+  }
+
+  // Validate agent has wallet address
+  if (!agent.walletAddress) {
+    return res.status(400).json({ error: 'No wallet address associated with agent' });
+  }
+
+  // Validate amount
+  if (typeof amount !== 'string' || !amount) {
+    return res.status(400).json({ error: 'Amount must be a string (BigInt)' });
+  }
+
+  let amountBigInt;
+  try {
+    amountBigInt = BigInt(amount);
+    if (amountBigInt <= 0n) {
+      return res.status(400).json({ error: 'Amount must be positive' });
+    }
+  } catch (err) {
+    return res.status(400).json({ error: 'Invalid amount format' });
+  }
+
+  // Check agent balance
+  const agentBalance = BigInt(agent.realmBalance || '0');
+  if (agentBalance < amountBigInt) {
+    return res.status(400).json({
+      error: `Insufficient REALM balance: have ${agentBalance.toString()}, need ${amountBigInt.toString()}`
+    });
+  }
+
+  // Execute transfer
+  try {
+    const { hash } = await transferRealm(agent.walletAddress, amountBigInt);
+
+    // Deduct from agent balance only after successful transfer
+    const newBalance = agentBalance - amountBigInt;
+    agent.realmBalance = newBalance.toString();
+
+    logEvent(world, {
+      type: 'withdraw',
+      agent: agentId,
+      amount: amountBigInt.toString(),
+      to: agent.walletAddress,
+      txHash: hash
+    });
+
+    res.json({
+      success: true,
+      txHash: hash,
+      realmWithdrawn: amountBigInt.toString(),
+      realmBalance: agent.realmBalance
+    });
+  } catch (err) {
+    console.error('Withdraw failed:', err.message);
+    res.status(500).json({ error: err.message });
+  }
 });
 
 // --- Tick Loop ---

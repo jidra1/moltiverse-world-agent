@@ -135,6 +135,14 @@ function loadWorld(world) {
         agent.verified = false;
       }
 
+      // Default walletAddress and realmBalance for agents saved before token economy
+      if (agent.walletAddress == null) {
+        agent.walletAddress = null;
+      }
+      if (agent.realmBalance == null) {
+        agent.realmBalance = '0';
+      }
+
       // Floor negative inventory values to 0
       for (const resource of Object.keys(agent.inventory)) {
         if (agent.inventory[resource] < 0) {

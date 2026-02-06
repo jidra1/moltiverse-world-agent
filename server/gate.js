@@ -86,7 +86,7 @@ async function verifyEntry(agentId, proof) {
 
   // Allow entry — verified only when wallet + signature + balance all passed
   enteredAgents.add(agentId);
-  return { allowed: true, verified };
+  return { allowed: true, verified, walletAddress: walletAddress || null };
 }
 
 function resetGate() {

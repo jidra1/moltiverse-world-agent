@@ -2,7 +2,7 @@
 
 import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE, AGENT_CLASSES, getHpRegenAmount, getTileType } from './world.js';
 import { resolveCombat } from './combat.js';
-import { gatherResource, proposeTrade, acceptTrade, rejectTrade } from './economy.js';
+import { gatherResource, proposeTrade, acceptTrade, rejectTrade, convertGoldToRealm } from './economy.js';
 import { verifyEntry } from './gate.js';
 
 const DIRECTIONS = {
@@ -29,6 +29,7 @@ async function processAction(world, action) {
     case 'speak':        return handleSpeak(world, action);
     case 'build':        return handleBuild(world, action);
     case 'pickup':       return handlePickup(world, action);
+    case 'convert':      return handleConvert(world, action);
     default:             return { success: false, reason: `Unknown action: ${action.type}` };
   }
 }
@@ -50,6 +51,7 @@ async function handleEnter(world, action) {
     return { success: false, reason: `Invalid class: ${action.class}. Must be one of: warrior, gatherer, builder` };
   }
   agent.verified = gateResult.verified;
+  agent.walletAddress = gateResult.walletAddress;
   addAgent(world, agent);
 
   agent.lastActionTick = world.tick;
@@ -312,6 +314,13 @@ function handlePickup(world, action) {
   logEvent(world, { type: 'pickup', agent: agentId, loot: picked, x: agent.x, y: agent.y });
 
   return { success: true, picked, inventory: { ...agent.inventory } };
+}
+
+function handleConvert(world, action) {
+  const blocked = requireVerified(world, action.agentId, 'convert gold to $REALM');
+  if (blocked) return blocked;
+  const { agentId, amount } = action;
+  return convertGoldToRealm(world, agentId, amount);
 }
 
 async function processActionQueue(world) {

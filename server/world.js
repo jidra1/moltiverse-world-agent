@@ -197,6 +197,8 @@ function createAgent(id, agentClass) {
     kills: 0,
     alive: true,
     verified: false,
+    walletAddress: null,
+    realmBalance: '0',
     enteredAt: Date.now(),
     lastActionTick: 0
   };
