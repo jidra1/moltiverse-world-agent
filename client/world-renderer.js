@@ -11,7 +11,7 @@ const ZONE_COLORS = {
   forest: 0x153a15,
   market: 0x2e2a12,
   arena:  0x3a1515,
-  shrine: 0x151a38
+  shrine: 0x2e2816
 };
 
 const RESOURCE_COLORS = {
@@ -86,6 +86,71 @@ const LAKE_MAT = new THREE.MeshLambertMaterial({
   color: 0x2277aa, transparent: true, opacity: 0.7,
   emissive: 0x113344, emissiveIntensity: 0.3,
 });
+
+// --- Shrine / desert constants ---
+const DUNE_GEO = new THREE.SphereGeometry(0.3, 8, 4, 0, Math.PI * 2, 0, Math.PI / 2);
+const DUNE_MAT = new THREE.MeshLambertMaterial({ color: 0x8a7a50 });
+
+const CACTUS_BODY_GEO = new THREE.CylinderGeometry(0.06, 0.07, 0.5, 6);
+const CACTUS_ARM_GEO = new THREE.CylinderGeometry(0.04, 0.04, 0.2, 5);
+const CACTUS_MAT = new THREE.MeshLambertMaterial({ color: 0x3a6a2a });
+
+const TEMPLE_TIER1_GEO = new THREE.BoxGeometry(1.0, 0.25, 1.0);
+const TEMPLE_TIER2_GEO = new THREE.BoxGeometry(0.7, 0.25, 0.7);
+const TEMPLE_TIER3_GEO = new THREE.BoxGeometry(0.45, 0.2, 0.45);
+const TEMPLE_PEAK_GEO = new THREE.ConeGeometry(0.25, 0.35, 4);
+const TEMPLE_COLUMN_GEO = new THREE.CylinderGeometry(0.04, 0.05, 0.55, 6);
+const TEMPLE_STONE_MAT = new THREE.MeshLambertMaterial({ color: 0x5a5040 });
+const TEMPLE_SAND_MAT = new THREE.MeshLambertMaterial({ color: 0xa89060 });
+const TEMPLE_GOLD_MAT = new THREE.MeshLambertMaterial({ color: 0xccaa44, emissive: 0x554400, emissiveIntensity: 0.4 });
+
+function createTemple(scale) {
+  const group = new THREE.Group();
+  // Tier 1 — wide base
+  const tier1 = new THREE.Mesh(TEMPLE_TIER1_GEO, TEMPLE_STONE_MAT);
+  tier1.position.y = 0.125 * scale;
+  tier1.scale.setScalar(scale);
+  group.add(tier1);
+  // Tier 2 — medium
+  const tier2 = new THREE.Mesh(TEMPLE_TIER2_GEO, TEMPLE_SAND_MAT);
+  tier2.position.y = 0.375 * scale;
+  tier2.scale.setScalar(scale);
+  group.add(tier2);
+  // Tier 3 — small
+  const tier3 = new THREE.Mesh(TEMPLE_TIER3_GEO, TEMPLE_SAND_MAT);
+  tier3.position.y = 0.6 * scale;
+  tier3.scale.setScalar(scale);
+  group.add(tier3);
+  // Peak — gold cone
+  const peak = new THREE.Mesh(TEMPLE_PEAK_GEO, TEMPLE_GOLD_MAT);
+  peak.position.y = 0.875 * scale;
+  peak.scale.setScalar(scale);
+  group.add(peak);
+  // 4 corner columns
+  const colOffset = 0.42 * scale;
+  for (const [cx, cz] of [[-colOffset, -colOffset], [colOffset, -colOffset], [-colOffset, colOffset], [colOffset, colOffset]]) {
+    const col = new THREE.Mesh(TEMPLE_COLUMN_GEO, TEMPLE_GOLD_MAT);
+    col.position.set(cx, 0.275 * scale, cz);
+    col.scale.setScalar(scale);
+    group.add(col);
+  }
+  return group;
+}
+
+function createCactus(scale) {
+  const group = new THREE.Group();
+  const body = new THREE.Mesh(CACTUS_BODY_GEO, CACTUS_MAT);
+  body.position.y = 0.25 * scale;
+  body.scale.setScalar(scale);
+  group.add(body);
+  // One arm
+  const arm = new THREE.Mesh(CACTUS_ARM_GEO, CACTUS_MAT);
+  arm.position.set(0.1 * scale, 0.3 * scale, 0);
+  arm.rotation.z = -Math.PI / 4;
+  arm.scale.setScalar(scale);
+  group.add(arm);
+  return group;
+}
 
 function createMountain(scale, peakMat, rotationY) {
   const group = new THREE.Group();
@@ -174,6 +239,9 @@ export class WorldRenderer {
     this.addForestMountains();
     this.addForestLakes();
 
+    // Shrine desert decorations
+    this.addShrineDecorations();
+
     // Zone border lines
     this.addZoneBorders();
 
@@ -247,6 +315,58 @@ export class WorldRenderer {
     }
   }
 
+  addShrineDecorations() {
+    const half = GRID_SIZE / 2;
+    // Central temple positions (grid coords)
+    const templeCenters = [{ x: 26, y: 5 }, { x: 26, y: 26 }];
+
+    for (const tc of templeCenters) {
+      const temple = createTemple(2.5);
+      temple.position.set(tc.x - half + 0.5, 0, tc.y - half + 0.5);
+      temple.rotation.y = Math.PI / 6; // 30°
+      this.gridGroup.add(temple);
+    }
+
+    for (let y = 0; y < GRID_SIZE; y++) {
+      for (let x = 0; x < GRID_SIZE; x++) {
+        if (getTileType(x, y) !== 'shrine') continue;
+
+        // Skip tiles near temple centers (±1)
+        let nearTemple = false;
+        for (const tc of templeCenters) {
+          if (Math.abs(x - tc.x) <= 1 && Math.abs(y - tc.y) <= 1) {
+            nearTemple = true;
+            break;
+          }
+        }
+        if (nearTemple) continue;
+
+        const h = tileHash(x * 179, y * 241);
+        const wx = x - half + 0.5;
+        const wz = y - half + 0.5;
+
+        if (h < 0.08) {
+          // Sand dune — half-sphere, stretched horizontally
+          const dh = tileHash(x * 61, y * 79);
+          const dune = new THREE.Mesh(DUNE_GEO, DUNE_MAT);
+          dune.position.set(wx, 0, wz);
+          dune.scale.set(1.2 + dh * 0.6, 0.4 + dh * 0.3, 0.8 + dh * 0.4);
+          dune.rotation.y = dh * Math.PI * 2;
+          this.gridGroup.add(dune);
+        } else if (h < 0.38) {
+          // Cactus
+          const ch = tileHash(x * 83, y * 97);
+          const scale = 0.7 + ch * 0.6;
+          const cactus = createCactus(scale);
+          cactus.position.set(wx, 0, wz);
+          cactus.rotation.y = ch * Math.PI * 2;
+          this.gridGroup.add(cactus);
+        }
+        // else: bare sand (~62% of tiles)
+      }
+    }
+  }
+
   addZoneBorders() {
     const zoneBorderColor = 0x334466;
     const mat = new THREE.LineBasicMaterial({ color: zoneBorderColor, transparent: true, opacity: 0.5 });
@@ -280,8 +400,8 @@ export class WorldRenderer {
       { text: 'FOREST', x: 15.5, y: 26, color: '#55aa55' },
       { text: 'MARKET', x: 5, y: 15.5, color: '#ccaa44' },
       { text: 'ARENA', x: 26, y: 15.5, color: '#cc4444' },
-      { text: 'SHRINE', x: 26, y: 5, color: '#4488cc' },
-      { text: 'SHRINE', x: 26, y: 26, color: '#4488cc' },
+      { text: 'SHRINE', x: 26, y: 5, color: '#ccaa44' },
+      { text: 'SHRINE', x: 26, y: 26, color: '#ccaa44' },
     ];
 
     for (const label of labels) {
@@ -342,6 +462,9 @@ export class WorldRenderer {
 
       // Render every 3rd tile to keep scene light
       if ((x + y) % 3 !== 0) continue;
+
+      // Skip gold octahedrons in shrine zones (temples/dunes provide the visual)
+      if (data.resource === 'gold' && getTileType(x, y) === 'shrine') continue;
 
       const count = Math.min(data.count, 5);
       const baseX = x - GRID_SIZE / 2 + 0.5 + 0.3;

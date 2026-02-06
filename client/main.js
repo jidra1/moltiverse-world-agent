@@ -49,8 +49,8 @@ const zoneLights = [
   { color: 0x44aa55, x: -10, z: 10, intensity: 0.4 },   // forest bottom-left
   { color: 0xccaa33, x: -10, z: 0, intensity: 0.3 },     // market
   { color: 0xcc4444, x: 10, z: 0, intensity: 0.3 },      // arena
-  { color: 0x4466cc, x: 10, z: -10, intensity: 0.4 },    // shrine top
-  { color: 0x4466cc, x: 10, z: 10, intensity: 0.4 },     // shrine bottom
+  { color: 0xcc9933, x: 10, z: -10, intensity: 0.4 },    // shrine top
+  { color: 0xcc9933, x: 10, z: 10, intensity: 0.4 },     // shrine bottom
   { color: 0x6666aa, x: 0, z: 0, intensity: 0.3 },       // spawn center
 ];
 for (const zl of zoneLights) {
