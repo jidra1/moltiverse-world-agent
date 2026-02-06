@@ -92,8 +92,50 @@ export class WorldRenderer {
     border.position.y = 0.01;
     this.gridGroup.add(border);
 
+    // Zone labels
+    this.addZoneLabels();
+
     // Initial resource rendering
     this.renderResources();
+  }
+
+  addZoneLabels() {
+    const labels = [
+      { text: 'SPAWN', x: 15.5, y: 15.5, color: '#8888cc' },
+      { text: 'FOREST', x: 5, y: 5, color: '#55aa55' },
+      { text: 'FOREST', x: 15.5, y: 5, color: '#55aa55' },
+      { text: 'FOREST', x: 5, y: 26, color: '#55aa55' },
+      { text: 'FOREST', x: 15.5, y: 26, color: '#55aa55' },
+      { text: 'MARKET', x: 5, y: 15.5, color: '#ccaa44' },
+      { text: 'ARENA', x: 26, y: 15.5, color: '#cc4444' },
+      { text: 'SHRINE', x: 26, y: 5, color: '#4488cc' },
+      { text: 'SHRINE', x: 26, y: 26, color: '#4488cc' },
+    ];
+
+    for (const label of labels) {
+      const canvas = document.createElement('canvas');
+      const ctx = canvas.getContext('2d');
+      canvas.width = 256;
+      canvas.height = 64;
+
+      ctx.font = 'bold 32px monospace';
+      ctx.textAlign = 'center';
+      ctx.fillStyle = 'rgba(0,0,0,0.3)';
+      ctx.fillText(label.text, 129, 41);
+      ctx.fillStyle = label.color;
+      ctx.fillText(label.text, 128, 40);
+
+      const texture = new THREE.CanvasTexture(canvas);
+      const mat = new THREE.SpriteMaterial({ map: texture, transparent: true, opacity: 0.7, depthWrite: false });
+      const sprite = new THREE.Sprite(mat);
+      sprite.position.set(
+        label.x - GRID_SIZE / 2 + 0.5,
+        0.3,
+        label.y - GRID_SIZE / 2 + 0.5
+      );
+      sprite.scale.set(5, 1.25, 1);
+      this.gridGroup.add(sprite);
+    }
   }
 
   updateResources(activeTiles) {

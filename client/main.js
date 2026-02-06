@@ -4,12 +4,14 @@ import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { WorldRenderer } from './world-renderer.js';
 import { AgentRenderer } from './agent-renderer.js';
+import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
 
 // --- Scene Setup ---
 const container = document.getElementById('canvas-container');
 const scene = new THREE.Scene();
-scene.background = new THREE.Color(0x0a0a0f);
+scene.background = new THREE.Color(0x080810);
+scene.fog = new THREE.FogExp2(0x080810, 0.015);
 
 const camera = new THREE.PerspectiveCamera(60, window.innerWidth / window.innerHeight, 0.1, 200);
 camera.position.set(0, 30, 25);
@@ -46,6 +48,7 @@ const worldRenderer = new WorldRenderer(scene);
 worldRenderer.buildGrid();
 
 const agentRenderer = new AgentRenderer(scene);
+const effects = new EffectsManager(scene);
 const ui = new UI();
 
 // --- State ---
@@ -99,6 +102,7 @@ function handleMessage(msg) {
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
+          triggerEffect(event);
         }
       }
     }
@@ -127,6 +131,7 @@ function handleMessage(msg) {
         if (!seenEventIds.has(eid)) {
           seenEventIds.add(eid);
           ui.addLogEntry(event);
+          triggerEffect(event);
         }
       }
       // Limit seen set size
@@ -153,6 +158,31 @@ async function fetchFullState() {
     ui.updateLeaderboard(data.agents);
   } catch (e) {
     // Silent fail — will retry next cycle
+  }
+}
+
+// --- Visual Effects ---
+function triggerEffect(event) {
+  switch (event.type) {
+    case 'enter':
+      effects.addEnterGlow(event.x, event.y);
+      break;
+    case 'gather':
+      effects.addGatherSparkle(event.x, event.y, event.resource);
+      break;
+    case 'combat': {
+      const defender = worldState.agents?.[event.defender];
+      if (defender) effects.addCombatFlash(defender.x, defender.y);
+      break;
+    }
+    case 'kill': {
+      const victim = worldState.agents?.[event.victim];
+      if (victim) effects.addKillExplosion(victim.x, victim.y);
+      break;
+    }
+    case 'speak':
+      effects.addChatBubble(event.x, event.y, event.message);
+      break;
   }
 }
 
@@ -200,6 +230,7 @@ function animate() {
 
   controls.update();
   agentRenderer.animate(delta);
+  effects.animate(delta);
 
   renderer.render(scene, camera);
 }
