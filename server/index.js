@@ -464,10 +464,19 @@ function getWorldSnapshot() {
     }
   }
 
-  // Spectator view: strip sensitive agent data (HP, inventory, kills)
+  // Public agent data for spectators
   const publicAgents = {};
   for (const [id, a] of Object.entries(world.agents)) {
-    publicAgents[id] = { id: a.id, x: a.x, y: a.y, score: a.score, class: a.class, alive: a.alive };
+    publicAgents[id] = { 
+      id: a.id, 
+      x: a.x, 
+      y: a.y, 
+      hp: a.hp,
+      score: a.score, 
+      class: a.class, 
+      kills: a.kills || 0,
+      alive: a.alive 
+    };
   }
 
   return {
