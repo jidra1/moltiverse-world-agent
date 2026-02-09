@@ -39,8 +39,27 @@ function startAgent(type, id, restartDelay = 5000) {
   return agent;
 }
 
-// Wait for server to be ready, then start agents
-setTimeout(() => {
+// Wait for server to be ready with health check
+async function waitForServer(maxRetries = 30) {
+  for (let i = 0; i < maxRetries; i++) {
+    try {
+      const res = await fetch(`http://localhost:${PORT}/api/gate`);
+      if (res.ok) {
+        console.log(`[start-all] Server ready after ${i + 1} attempts`);
+        return true;
+      }
+    } catch (e) {
+      // not ready yet
+    }
+    await new Promise(r => setTimeout(r, 2000));
+  }
+  console.error('[start-all] Server did not become ready');
+  return false;
+}
+
+waitForServer().then(ready => {
+  if (!ready) return;
+  
   console.log('[start-all] Starting agents...');
   
   // Multiple gatherers in different areas
@@ -56,7 +75,7 @@ setTimeout(() => {
   startAgent('builder', 'mason-the-builder');
   
   console.log('[start-all] All 6 agents started (auto-restart enabled)');
-}, 8000);
+});
 
 // Handle shutdown
 process.on('SIGTERM', () => {
