@@ -55,7 +55,7 @@ import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
 const __filename = fileURLToPath(import.meta.url);
 const __dirname = dirname(__filename);
-app.use(express.static(join(__dirname, '../client/dist')));
+app.use(express.static(join(__dirname, '../client/dist'), { index: false }));
 
 // Landing page at /
 app.get('/', (req, res) => {
