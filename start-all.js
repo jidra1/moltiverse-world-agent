@@ -72,6 +72,7 @@ waitForServer().then(ready => {
     ['warrior', 'blade-the-warrior'],
     ['warrior', 'shadow-hunter'],
     ['builder', 'mason-the-builder'],
+    ['prophet', 'lobster-prophet'],
   ];
   
   // Stagger starts by 3s each to avoid overwhelming the server
