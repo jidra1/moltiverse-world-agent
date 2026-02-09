@@ -20,7 +20,7 @@ server.on('error', (err) => {
 
 // Auto-restart agent helper
 function startAgent(type, id, restartDelay = 5000) {
-  const agentEnv = { ...process.env, API_URL: `http://127.0.0.1:${PORT}`, AGENT_ID: id };
+  const agentEnv = { ...process.env, API_URL: `http://0.0.0.0:${PORT}`, AGENT_ID: id };
   
   const agent = spawn('node', [join(__dirname, `agents/${type}.js`)], {
     stdio: 'inherit',
@@ -41,19 +41,22 @@ function startAgent(type, id, restartDelay = 5000) {
 
 // Wait for server to be ready with health check
 async function waitForServer(maxRetries = 30) {
+  const url = `http://0.0.0.0:${PORT}/api/gate`;
+  console.log(`[start-all] Waiting for server at ${url}...`);
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://127.0.0.1:${PORT}/api/gate`);
+      const res = await fetch(url);
       if (res.ok) {
         console.log(`[start-all] Server ready after ${i + 1} attempts`);
         return true;
       }
+      console.log(`[start-all] Attempt ${i + 1}: status ${res.status}`);
     } catch (e) {
-      // not ready yet
+      console.log(`[start-all] Attempt ${i + 1}: ${e.message}`);
     }
     await new Promise(r => setTimeout(r, 2000));
   }
-  console.error('[start-all] Server did not become ready');
+  console.error('[start-all] Server did not become ready after 30 attempts');
   return false;
 }
 
