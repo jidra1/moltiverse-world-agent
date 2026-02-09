@@ -18,28 +18,44 @@ server.on('error', (err) => {
   console.error('[start-all] Server error:', err);
 });
 
-// Wait for server to be ready, then start agents
-setTimeout(() => {
-  console.log('[start-all] Starting demo agents...');
+// Auto-restart agent helper
+function startAgent(type, id, restartDelay = 5000) {
+  const agentEnv = { ...process.env, API_URL: `http://localhost:${PORT}`, AGENT_ID: id };
   
-  const agentEnv = { ...process.env, API_URL: `http://localhost:${PORT}` };
-  
-  ['gatherer', 'warrior', 'builder'].forEach(type => {
-    const agent = spawn('node', [join(__dirname, `agents/${type}.js`)], {
-      stdio: 'inherit',
-      env: agentEnv
-    });
-    
-    agent.on('error', (err) => {
-      console.error(`[start-all] ${type} error:`, err);
-    });
-    
-    agent.on('exit', (code) => {
-      console.log(`[start-all] ${type} exited with code ${code}`);
-    });
+  const agent = spawn('node', [join(__dirname, `agents/${type}.js`)], {
+    stdio: 'inherit',
+    env: agentEnv
   });
   
-  console.log('[start-all] All agents started');
+  agent.on('error', (err) => {
+    console.error(`[start-all] ${id} error:`, err);
+  });
+  
+  agent.on('exit', (code) => {
+    console.log(`[start-all] ${id} exited with code ${code}, restarting in ${restartDelay}ms...`);
+    setTimeout(() => startAgent(type, id, restartDelay), restartDelay);
+  });
+  
+  return agent;
+}
+
+// Wait for server to be ready, then start agents
+setTimeout(() => {
+  console.log('[start-all] Starting agents...');
+  
+  // Multiple gatherers in different areas
+  startAgent('gatherer', 'luna-the-gatherer');
+  startAgent('gatherer', 'rex-the-forager');
+  startAgent('gatherer', 'nova-the-miner');
+  
+  // Warriors
+  startAgent('warrior', 'blade-the-warrior');
+  startAgent('warrior', 'shadow-hunter');
+  
+  // Builders
+  startAgent('builder', 'mason-the-builder');
+  
+  console.log('[start-all] All 6 agents started (auto-restart enabled)');
 }, 8000);
 
 // Handle shutdown

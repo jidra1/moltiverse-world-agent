@@ -2,7 +2,7 @@
 // Moves to forest → gathers wood → moves to market → trades
 
 const API = process.env.API_URL || 'http://localhost:3000';
-const AGENT_ID = 'gatherer-' + Math.random().toString(36).slice(2, 6);
+const AGENT_ID = process.env.AGENT_ID || ('gatherer-' + Math.random().toString(36).slice(2, 6));
 const TICK_MS = 2000;
 
 async function api(method, path, body) {

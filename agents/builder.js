@@ -2,7 +2,7 @@
 // Gathers diverse resources, holds high-value tiles, trades strategically
 
 const API = process.env.API_URL || 'http://localhost:3000';
-const AGENT_ID = 'builder-' + Math.random().toString(36).slice(2, 6);
+const AGENT_ID = process.env.AGENT_ID || ('builder-' + Math.random().toString(36).slice(2, 6));
 const TICK_MS = 2500;
 
 async function api(method, path, body) {
