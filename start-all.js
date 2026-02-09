@@ -20,7 +20,7 @@ server.on('error', (err) => {
 
 // Auto-restart agent helper
 function startAgent(type, id, restartDelay = 5000) {
-  const agentEnv = { ...process.env, API_URL: `http://localhost:${PORT}`, AGENT_ID: id };
+  const agentEnv = { ...process.env, API_URL: `http://127.0.0.1:${PORT}`, AGENT_ID: id };
   
   const agent = spawn('node', [join(__dirname, `agents/${type}.js`)], {
     stdio: 'inherit',
@@ -43,7 +43,7 @@ function startAgent(type, id, restartDelay = 5000) {
 async function waitForServer(maxRetries = 30) {
   for (let i = 0; i < maxRetries; i++) {
     try {
-      const res = await fetch(`http://localhost:${PORT}/api/gate`);
+      const res = await fetch(`http://127.0.0.1:${PORT}/api/gate`);
       if (res.ok) {
         console.log(`[start-all] Server ready after ${i + 1} attempts`);
         return true;
@@ -60,21 +60,27 @@ async function waitForServer(maxRetries = 30) {
 waitForServer().then(ready => {
   if (!ready) return;
   
-  console.log('[start-all] Starting agents...');
+  console.log('[start-all] Starting agents (staggered)...');
   
-  // Multiple gatherers in different areas
-  startAgent('gatherer', 'luna-the-gatherer');
-  startAgent('gatherer', 'rex-the-forager');
-  startAgent('gatherer', 'nova-the-miner');
+  const agents = [
+    ['gatherer', 'luna-the-gatherer'],
+    ['gatherer', 'rex-the-forager'],
+    ['gatherer', 'nova-the-miner'],
+    ['warrior', 'blade-the-warrior'],
+    ['warrior', 'shadow-hunter'],
+    ['builder', 'mason-the-builder'],
+  ];
   
-  // Warriors
-  startAgent('warrior', 'blade-the-warrior');
-  startAgent('warrior', 'shadow-hunter');
+  // Stagger starts by 3s each to avoid overwhelming the server
+  for (let i = 0; i < agents.length; i++) {
+    setTimeout(() => {
+      const [type, id] = agents[i];
+      console.log(`[start-all] Starting ${id}...`);
+      startAgent(type, id);
+    }, i * 3000);
+  }
   
-  // Builders
-  startAgent('builder', 'mason-the-builder');
-  
-  console.log('[start-all] All 6 agents started (auto-restart enabled)');
+  console.log('[start-all] Agent launches scheduled (auto-restart enabled)');
 });
 
 // Handle shutdown
