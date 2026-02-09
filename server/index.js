@@ -2,6 +2,7 @@
 
 import express from 'express';
 import cors from 'cors';
+import compression from 'compression';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
@@ -26,7 +27,7 @@ import {
 const AGENT_INSTRUCTIONS = readFileSync(new URL('../AGENTS.md', import.meta.url), 'utf8');
 
 const PORT = process.env.PORT || 3000;
-const TICK_INTERVAL = 5000; // 5 seconds
+const TICK_INTERVAL = 2000; // 2 seconds
 const ACTION_COOLDOWN_MS = 1000; // Rate limit: 1 action per second per agent
 const INACTIVE_TICKS = 8640; // Prune agents after 8640 ticks (~12 hours) of inactivity
 const agentLastAction = new Map(); // agentId -> timestamp
@@ -46,6 +47,7 @@ initTreasury();
 // Express setup
 const app = express();
 app.use(cors());
+app.use(compression());
 app.use(express.json());
 
 // Serve static frontend files in production
@@ -185,6 +187,26 @@ app.post('/api/action', async (req, res) => {
   // Process immediately for responsiveness
   const results = await processActionQueue(world);
   const result = results[0]?.result;
+
+  // Broadcast action result to all WebSocket clients immediately
+  if (result?.success) {
+    const agent = world.agents[agentId];
+    const eventData = {
+      type: 'action',
+      data: {
+        tick: world.tick,
+        action: type,
+        agentId,
+        result,
+        agent: agent ? { id: agent.id, x: agent.x, y: agent.y, hp: agent.hp, alive: agent.alive, score: agent.score, class: agent.class } : null
+      }
+    };
+    for (const [ws] of wsClients) {
+      if (ws.readyState === 1) {
+        ws.send(JSON.stringify(eventData));
+      }
+    }
+  }
 
   res.json(result || { success: false, reason: 'No result' });
 });

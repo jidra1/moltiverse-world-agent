@@ -116,35 +116,25 @@ function requireVerified(world, agentId, actionName) {
 }
 
 function handleGather(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'gather');
-  if (blocked) return blocked;
   return gatherResource(world, action.agentId);
 }
 
 function handleTrade(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'trade');
-  if (blocked) return blocked;
   const { agentId, targetId, offer, request } = action;
   return proposeTrade(world, agentId, targetId, offer || {}, request || {});
 }
 
 function handleAcceptTrade(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'accept trade');
-  if (blocked) return blocked;
   const { agentId } = action;
   return acceptTrade(world, agentId);
 }
 
 function handleRejectTrade(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'reject trade');
-  if (blocked) return blocked;
   const { agentId } = action;
   return rejectTrade(agentId);
 }
 
 function handleAttack(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'attack');
-  if (blocked) return blocked;
   const { agentId, targetId } = action;
   return resolveCombat(world, agentId, targetId);
 }
@@ -197,8 +187,6 @@ const WALL_COST = { wood: 3, stone: 2 };
 const WALL_DECAY_TICKS = 120;
 
 function handleBuild(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'build');
-  if (blocked) return blocked;
   const { agentId, direction } = action;
   const agent = world.agents[agentId];
 
@@ -272,8 +260,6 @@ function handleBuild(world, action) {
 
 // --- Pickup Ground Loot ---
 function handlePickup(world, action) {
-  const blocked = requireVerified(world, action.agentId, 'pick up loot');
-  if (blocked) return blocked;
   const { agentId, resource } = action;
   const agent = world.agents[agentId];
 
