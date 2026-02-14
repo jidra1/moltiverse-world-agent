@@ -27,31 +27,60 @@ export class EffectsManager {
   addChatBubble(agentX, agentY, message, color = '#d9bbff') {
     const canvas = document.createElement('canvas');
     const ctx = canvas.getContext('2d');
-    canvas.width = 512;
-    canvas.height = 128;
+    const W = 512;
+    const fontSize = 26;
+    const lineH = 32;
+    const pad = 16;
+    const maxTextW = W - pad * 2;
+
+    // Word-wrap the message
+    ctx.font = fontSize + 'px monospace';
+    const words = message.split(' ');
+    const lines = [];
+    let cur = '';
+    for (const word of words) {
+      const test = cur ? cur + ' ' + word : word;
+      if (ctx.measureText(test).width > maxTextW && cur) {
+        lines.push(cur);
+        cur = word;
+      } else {
+        cur = test;
+      }
+    }
+    if (cur) lines.push(cur);
+    // Cap at 4 lines
+    if (lines.length > 4) { lines.length = 4; lines[3] = lines[3].slice(0, -3) + '...'; }
+
+    const textH = lines.length * lineH;
+    const boxH = textH + pad * 2;
+    canvas.width = W;
+    canvas.height = boxH + 12;
 
     // Background
     ctx.fillStyle = 'rgba(20, 15, 30, 0.85)';
-    roundRect(ctx, 0, 10, 512, 108, 16);
+    roundRect(ctx, 0, 10, W, boxH, 16);
     ctx.fill();
     ctx.strokeStyle = color;
     ctx.lineWidth = 2;
-    roundRect(ctx, 0, 10, 512, 108, 16);
+    roundRect(ctx, 0, 10, W, boxH, 16);
     ctx.stroke();
 
     // Text
     ctx.fillStyle = '#eee';
-    ctx.font = '28px monospace';
-    const truncated = message.length > 40 ? message.slice(0, 37) + '...' : message;
-    ctx.fillText(truncated, 16, 72);
+    ctx.font = fontSize + 'px monospace';
+    lines.forEach((line, i) => {
+      ctx.fillText(line, pad, 10 + pad + fontSize + i * lineH);
+    });
 
     const texture = new THREE.CanvasTexture(canvas);
     const material = new THREE.SpriteMaterial({ map: texture, transparent: true, depthWrite: false });
     const sprite = new THREE.Sprite(material);
 
     const pos = this.toWorld(agentX, agentY);
+    const aspect = canvas.width / canvas.height;
+    const spriteW = 4;
     sprite.position.set(pos.x, pos.y + 2.5, pos.z);
-    sprite.scale.set(4, 1, 1);
+    sprite.scale.set(spriteW, spriteW / aspect, 1);
 
     this.scene.add(sprite);
     this.effects.push({
