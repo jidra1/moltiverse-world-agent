@@ -6,7 +6,7 @@ import compression from 'compression';
 import { createServer } from 'http';
 import { readFileSync } from 'fs';
 import { WebSocketServer } from 'ws';
-import { GRID_SIZE, createWorld, getVisibleTiles, getVisibleAgents, getCycleInfo, getEffectiveVision, removeAgent, logEvent } from './world.js';
+import { GRID_SIZE, TILE_TYPES, createWorld, getVisibleTiles, getVisibleAgents, getVisibleMobs, getCycleInfo, getEffectiveVision, removeAgent, logEvent, spawnMobsInZone, MOB_ATTACK_RANGE, getTile, moveAgentToTile, moveMob } from './world.js';
 import {
   createAlliance, inviteToAlliance, acceptInvite, leaveAlliance,
   getAlliance, getAllianceLeaderboard, getAllianceMembers,
@@ -121,6 +121,7 @@ app.get('/api/state', (req, res) => {
     const allyIds = getAllianceMembers(agentId).filter(id => id !== agentId);
     const visibleTiles = getVisibleTiles(world, agentId, allyIds);
     const visibleAgents = getVisibleAgents(world, agentId, allyIds);
+    const visibleMobs = getVisibleMobs(world, agentId, allyIds);
     const tiles = visibleTiles
       .filter(t => t.occupants.length > 0 || (t.resource && t.resourceCount !== 3) || (t.droppedLoot && Object.keys(t.droppedLoot).length > 0))
       .map(t => ({
@@ -133,6 +134,7 @@ app.get('/api/state', (req, res) => {
       tick: world.tick,
       gridSize: GRID_SIZE,
       agents: visibleAgents,
+      mobs: visibleMobs,
       activeTiles: tiles,
       events: world.eventLog.slice(-20),
       cycle: getCycleInfo(world.tick)
@@ -382,6 +384,85 @@ app.post('/api/withdraw', async (req, res) => {
   }
 });
 
+// --- MOB AI ---
+
+function processMobs(world) {
+  // Spawn mobs in each zone type
+  const zoneTypes = Object.values(TILE_TYPES);
+  for (const zoneType of zoneTypes) {
+    if (zoneType !== 'spawn') { // Don't spawn mobs in spawn zones
+      spawnMobsInZone(world, zoneType);
+    }
+  }
+
+  // Process each mob's AI
+  for (const mob of Object.values(world.mobs)) {
+    if (!mob.alive) continue;
+    
+    // Find nearest agent within attack range
+    let nearestAgent = null;
+    let nearestDistance = Infinity;
+    
+    for (const agent of Object.values(world.agents)) {
+      if (!agent.alive) continue;
+      const distance = Math.abs(agent.x - mob.x) + Math.abs(agent.y - mob.y);
+      if (distance <= MOB_ATTACK_RANGE && distance < nearestDistance) {
+        nearestAgent = agent;
+        nearestDistance = distance;
+      }
+    }
+    
+    if (nearestAgent) {
+      // Attack the nearest agent
+      const damage = Math.floor(mob.damage * (Math.random() * 0.4 + 0.8)); // 80-120% damage
+      nearestAgent.hp -= damage;
+      
+      logEvent(world, {
+        type: 'mob_attack',
+        mobId: mob.id,
+        mobType: mob.type,
+        target: nearestAgent.id,
+        damage,
+        x: mob.x,
+        y: mob.y
+      });
+      
+      // Check if agent died
+      if (nearestAgent.hp <= 0) {
+        nearestAgent.hp = 50;
+        nearestAgent.alive = true;
+        nearestAgent.score = Math.max(0, nearestAgent.score - 25);
+        // Clear inventory
+        for (const r of Object.keys(nearestAgent.inventory)) {
+          nearestAgent.inventory[r] = 0;
+        }
+        // Respawn in spawn zone
+        const spawnX = 31 + Math.floor(Math.random() * 2);
+        const spawnY = 31 + Math.floor(Math.random() * 2);
+        moveAgentToTile(world, nearestAgent.id, spawnX, spawnY);
+        
+        logEvent(world, { type: 'mob_kill', victim: nearestAgent.id, killer: mob.id, killerType: mob.type });
+      }
+    } else if (Math.random() < 0.3) { // 30% chance to move randomly
+      const directions = [
+        { dx: 0, dy: -1 }, { dx: 0, dy: 1 }, 
+        { dx: -1, dy: 0 }, { dx: 1, dy: 0 }
+      ];
+      const direction = directions[Math.floor(Math.random() * directions.length)];
+      const newX = mob.x + direction.dx;
+      const newY = mob.y + direction.dy;
+      
+      // Check bounds and tile availability
+      if (newX >= 0 && newX < 64 && newY >= 0 && newY < 64) {
+        const targetTile = getTile(world, newX, newY);
+        if (targetTile && targetTile.occupants.length === 0 && !targetTile.wall) {
+          moveMob(world, mob.id, newX, newY);
+        }
+      }
+    }
+  }
+}
+
 // --- Tick Loop ---
 
 async function tick() {
@@ -395,6 +476,9 @@ async function tick() {
 
   // Process hunger
   processHunger(world);
+
+  // Process mobs (spawn, AI, combat)
+  processMobs(world);
 
   // Regenerate resources
   regenerateResources(world);
@@ -417,6 +501,9 @@ async function tick() {
     agents: Object.values(world.agents).map(a => ({
       id: a.id, x: a.x, y: a.y, hp: a.hp, alive: a.alive, score: a.score, class: a.class
     })),
+    mobs: Object.values(world.mobs).filter(m => m.alive).map(m => ({
+      id: m.id, type: m.type, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, alive: m.alive
+    })),
     events: world.eventLog.slice(-10),
     results,
     cycle: getCycleInfo(world.tick)
@@ -429,12 +516,16 @@ async function tick() {
       // Filtered view for subscribed agent (with alliance shared vision)
       const allyIds = getAllianceMembers(meta.agentId).filter(id => id !== meta.agentId);
       const visibleAgents = getVisibleAgents(world, meta.agentId, allyIds);
+      const visibleMobs = getVisibleMobs(world, meta.agentId, allyIds);
       ws.send(JSON.stringify({
         type: 'tick',
         data: {
           ...tickData,
           agents: Object.values(visibleAgents).map(a => ({
             id: a.id, x: a.x, y: a.y, hp: a.hp, alive: a.alive, score: a.score, class: a.class
+          })),
+          mobs: Object.values(visibleMobs).map(m => ({
+            id: m.id, type: m.type, x: m.x, y: m.y, hp: m.hp, maxHp: m.maxHp, alive: m.alive
           }))
         }
       }));
@@ -511,10 +602,27 @@ function getWorldSnapshot() {
     };
   }
 
+  // Public mob data
+  const publicMobs = {};
+  for (const [id, m] of Object.entries(world.mobs)) {
+    if (m.alive) {
+      publicMobs[id] = {
+        id: m.id,
+        type: m.type,
+        x: m.x,
+        y: m.y,
+        hp: m.hp,
+        maxHp: m.maxHp,
+        alive: m.alive
+      };
+    }
+  }
+
   return {
     tick: world.tick,
     gridSize: GRID_SIZE,
     agents: publicAgents,
+    mobs: publicMobs,
     activeTiles: tiles,
     events: world.eventLog.slice(-20),
     cycle: getCycleInfo(world.tick)

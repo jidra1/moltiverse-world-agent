@@ -59,6 +59,10 @@ export class Player {
     return this.sendAction('attack', { targetId });
   }
 
+  async attackMob(mobId) {
+    return this.sendAction('attack_mob', { mobId });
+  }
+
   async speak(message) {
     return this.sendAction('speak', { message });
   }

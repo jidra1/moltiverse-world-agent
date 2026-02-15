@@ -8,6 +8,8 @@ import { UnrealBloomPass } from 'three/addons/postprocessing/UnrealBloomPass.js'
 import { OutputPass } from 'three/addons/postprocessing/OutputPass.js';
 import { WorldRenderer } from './world-renderer.js';
 import { AgentRenderer } from './agent-renderer.js';
+import { MobRenderer } from './mob-renderer.js';
+import { Minimap } from './minimap.js';
 import { EffectsManager } from './effects.js';
 import { UI } from './ui.js';
 import { SoundManager } from './sounds.js';
@@ -181,6 +183,8 @@ const worldRenderer = new WorldRenderer(scene);
 worldRenderer.buildGrid();
 
 const agentRenderer = new AgentRenderer(scene);
+const mobRenderer = new MobRenderer(scene);
+const minimap = new Minimap();
 const effects = new EffectsManager(scene);
 const ui = new UI();
 const sounds = new SoundManager();
@@ -237,6 +241,8 @@ function handleMessage(msg) {
     ui.updateLeaderboard(worldState.agents);
     worldRenderer.updateResources(worldState.activeTiles || []);
     agentRenderer.updateAgents(worldState.agents);
+    mobRenderer.updateMobs(worldState.mobs || {});
+    minimap.update(worldState.agents, worldState.mobs, player?.agentId);
     updatePlayerHUD();
 
     // Load initial events
@@ -268,6 +274,8 @@ function handleMessage(msg) {
       }
       ui.updateLeaderboard(worldState.agents);
       agentRenderer.updateAgents(worldState.agents);
+      mobRenderer.updateMobs(worldState.mobs || {});
+      minimap.update(worldState.agents, worldState.mobs, player?.agentId);
       updatePlayerHUD();
     }
 
@@ -303,6 +311,8 @@ async function fetchFullState() {
     worldState = data;
     worldRenderer.updateResources(data.activeTiles || []);
     agentRenderer.updateAgents(data.agents);
+    mobRenderer.updateMobs(data.mobs || {});
+    minimap.update(data.agents, data.mobs, player?.agentId);
     ui.updateLeaderboard(data.agents);
   } catch (e) {
     // Silent fail — will retry next cycle

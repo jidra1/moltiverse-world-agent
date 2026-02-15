@@ -1,6 +1,6 @@
 // Action handlers: enter, move, gather, trade, attack, speak
 
-import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE, AGENT_CLASSES, getHpRegenAmount, getTileType } from './world.js';
+import { getTile, createAgent, addAgent, moveAgentToTile, logEvent, GRID_SIZE, AGENT_CLASSES, getHpRegenAmount, getTileType, removeMob } from './world.js';
 import { resolveCombat } from './combat.js';
 import { gatherResource, proposeTrade, acceptTrade, rejectTrade, convertGoldToRealm } from './economy.js';
 import { verifyEntry } from './gate.js';
@@ -26,6 +26,7 @@ async function processAction(world, action) {
     case 'accept_trade': return handleAcceptTrade(world, action);
     case 'reject_trade': return handleRejectTrade(world, action);
     case 'attack':       return handleAttack(world, action);
+    case 'attack_mob':   return handleAttackMob(world, action);
     case 'speak':        return handleSpeak(world, action);
     case 'build':        return handleBuild(world, action);
     case 'pickup':       return handlePickup(world, action);
@@ -137,6 +138,85 @@ function handleRejectTrade(world, action) {
 function handleAttack(world, action) {
   const { agentId, targetId } = action;
   return resolveCombat(world, agentId, targetId);
+}
+
+function handleAttackMob(world, action) {
+  const { agentId, mobId } = action;
+  const agent = world.agents[agentId];
+  const mob = world.mobs[mobId];
+
+  if (!agent) return { success: false, reason: 'Agent not in world' };
+  if (!agent.alive) return { success: false, reason: 'Agent is dead' };
+  if (!mob) return { success: false, reason: 'Mob not found' };
+  if (!mob.alive) return { success: false, reason: 'Mob is dead' };
+
+  // Check if mob is in range (Manhattan distance)
+  const distance = Math.abs(agent.x - mob.x) + Math.abs(agent.y - mob.y);
+  if (distance > 1) {
+    return { success: false, reason: 'Mob is too far away' };
+  }
+
+  // Calculate damage based on agent class
+  const agentClass = AGENT_CLASSES[agent.class] || AGENT_CLASSES.warrior;
+  const baseDamage = 25;
+  const damage = Math.floor(baseDamage * agentClass.damageMultiplier * (Math.random() * 0.4 + 0.8));
+  
+  mob.hp -= damage;
+
+  logEvent(world, {
+    type: 'agent_attack_mob',
+    agent: agentId,
+    mobId,
+    mobType: mob.type,
+    damage,
+    mobHp: mob.hp,
+    x: mob.x,
+    y: mob.y
+  });
+
+  // Check if mob is killed
+  if (mob.hp <= 0) {
+    // Give XP and loot to agent
+    agent.score += mob.xpReward;
+    
+    // Drop loot
+    for (const [resource, amount] of Object.entries(mob.loot)) {
+      agent.inventory[resource] = (agent.inventory[resource] || 0) + amount;
+    }
+    
+    // Remove mob from world
+    removeMob(world, mobId);
+    
+    logEvent(world, {
+      type: 'mob_killed',
+      agent: agentId,
+      mobId,
+      mobType: mob.type,
+      xpGained: mob.xpReward,
+      loot: mob.loot,
+      x: mob.x,
+      y: mob.y
+    });
+
+    return {
+      success: true,
+      damage,
+      mobKilled: true,
+      xpGained: mob.xpReward,
+      loot: mob.loot,
+      inventory: { ...agent.inventory },
+      score: agent.score
+    };
+  }
+
+  return {
+    success: true,
+    damage,
+    mobKilled: false,
+    mobHp: mob.hp,
+    inventory: { ...agent.inventory },
+    score: agent.score
+  };
 }
 
 function handleSpeak(world, action) {

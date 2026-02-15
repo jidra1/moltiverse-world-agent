@@ -101,6 +101,34 @@ function getVisibleAgents(world, agentId, allyIds) {
   return visible;
 }
 
+function getVisibleMobs(world, agentId, allyIds) {
+  const viewpoints = [agentId, ...(allyIds || [])];
+  const radius = getEffectiveVision(world);
+  const visible = {};
+
+  for (const vid of viewpoints) {
+    const viewer = world.agents[vid];
+    if (!viewer) continue;
+    
+    for (const mob of Object.values(world.mobs)) {
+      if (!mob.alive || visible[mob.id]) continue;
+      const dist = Math.abs(mob.x - viewer.x) + Math.abs(mob.y - viewer.y);
+      if (dist <= radius) {
+        visible[mob.id] = {
+          id: mob.id,
+          type: mob.type,
+          x: mob.x,
+          y: mob.y,
+          hp: mob.hp,
+          maxHp: mob.maxHp,
+          alive: mob.alive
+        };
+      }
+    }
+  }
+  return visible;
+}
+
 // --- Day/Night Cycle ---
 const DAY_LENGTH = 60;   // ticks
 const NIGHT_LENGTH = 60; // ticks
@@ -137,6 +165,19 @@ const AGENT_CLASSES = {
 };
 const DEFAULT_CLASS = 'warrior';
 
+// --- NPC MOBS ---
+const MOB_TYPES = {
+  wolf: { hp: 60, damage: 15, xpReward: 20, loot: { wood: 1 }, zones: ['forest'] },
+  golem: { hp: 120, damage: 25, xpReward: 40, loot: { stone: 2 }, zones: ['arena'] },
+  bandit: { hp: 80, damage: 20, xpReward: 30, loot: { gold: 1 }, zones: ['market'] },
+  wraith: { hp: 100, damage: 30, xpReward: 50, loot: { gold: 2 }, zones: ['shrine'] }
+};
+
+const MAX_MOBS_PER_ZONE = 2;
+const MOB_SPAWN_CHANCE = 0.05; // 5% chance per tick per zone
+const MOB_MOVE_CHANCE = 0.3;   // 30% chance to move per tick
+const MOB_ATTACK_RANGE = 1;    // Manhattan distance for attack
+
 function createWorld() {
   const grid = [];
   for (let y = 0; y < GRID_SIZE; y++) {
@@ -158,6 +199,7 @@ function createWorld() {
   return {
     grid,
     agents: {},
+    mobs: {},
     tick: 0,
     actionQueue: [],
     eventLog: []
@@ -248,12 +290,122 @@ function logEvent(world, event) {
   }
 }
 
+// --- MOB FUNCTIONS ---
+
+function createMob(type, x, y) {
+  const config = MOB_TYPES[type];
+  if (!config) return null;
+  
+  return {
+    id: `mob_${type}_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`,
+    type,
+    x,
+    y,
+    hp: config.hp,
+    maxHp: config.hp,
+    damage: config.damage,
+    xpReward: config.xpReward,
+    loot: { ...config.loot },
+    lastMoveTick: 0,
+    target: null, // target agent ID
+    alive: true
+  };
+}
+
+function addMob(world, mob) {
+  world.mobs[mob.id] = mob;
+  const tile = getTile(world, mob.x, mob.y);
+  if (tile) tile.occupants.push(mob.id);
+}
+
+function removeMob(world, mobId) {
+  const mob = world.mobs[mobId];
+  if (!mob) return;
+  const tile = getTile(world, mob.x, mob.y);
+  if (tile) {
+    tile.occupants = tile.occupants.filter(id => id !== mobId);
+  }
+  delete world.mobs[mobId];
+}
+
+function moveMob(world, mobId, newX, newY) {
+  const mob = world.mobs[mobId];
+  if (!mob) return;
+  
+  // Remove from old tile
+  const oldTile = getTile(world, mob.x, mob.y);
+  if (oldTile) {
+    oldTile.occupants = oldTile.occupants.filter(id => id !== mobId);
+  }
+  
+  // Move to new position
+  mob.x = newX;
+  mob.y = newY;
+  
+  // Add to new tile
+  const newTile = getTile(world, newX, newY);
+  if (newTile) newTile.occupants.push(mobId);
+}
+
+function getZoneTiles(zoneType) {
+  const zoneTiles = [];
+  for (const zone of ZONES) {
+    if (zone.type === zoneType) {
+      for (let y = zone.y1; y <= zone.y2; y++) {
+        for (let x = zone.x1; x <= zone.x2; x++) {
+          zoneTiles.push({ x, y });
+        }
+      }
+    }
+  }
+  return zoneTiles;
+}
+
+function spawnMobsInZone(world, zoneType) {
+  // Check if we have room for more mobs
+  const existingMobs = Object.values(world.mobs).filter(mob => {
+    const tileType = getTileType(mob.x, mob.y);
+    return tileType === zoneType;
+  });
+  
+  if (existingMobs.length >= MAX_MOBS_PER_ZONE) return;
+  
+  // Find valid mob types for this zone
+  const validMobTypes = Object.entries(MOB_TYPES)
+    .filter(([type, config]) => config.zones.includes(zoneType))
+    .map(([type]) => type);
+  
+  if (validMobTypes.length === 0) return;
+  
+  // Try to spawn
+  if (Math.random() < MOB_SPAWN_CHANCE) {
+    const mobType = validMobTypes[Math.floor(Math.random() * validMobTypes.length)];
+    const zoneTiles = getZoneTiles(zoneType);
+    
+    // Find empty tile
+    const emptyTiles = zoneTiles.filter(pos => {
+      const tile = getTile(world, pos.x, pos.y);
+      return tile && tile.occupants.length === 0;
+    });
+    
+    if (emptyTiles.length > 0) {
+      const spawnPos = emptyTiles[Math.floor(Math.random() * emptyTiles.length)];
+      const mob = createMob(mobType, spawnPos.x, spawnPos.y);
+      if (mob) {
+        addMob(world, mob);
+        logEvent(world, { type: 'mob_spawn', mobType, mobId: mob.id, x: mob.x, y: mob.y });
+      }
+    }
+  }
+}
+
 export {
   GRID_SIZE, TILE_TYPES, RESOURCE_TYPES, ZONES, ZONE_RESOURCE,
-  AGENT_CLASSES, DEFAULT_CLASS,
+  AGENT_CLASSES, DEFAULT_CLASS, MOB_TYPES, MAX_MOBS_PER_ZONE, MOB_ATTACK_RANGE,
   VISION_RADIUS, DAY_LENGTH, NIGHT_LENGTH, CYCLE_LENGTH,
   createWorld, getTileType, getTile, createAgent, addAgent,
   removeAgent, removeAgentFromTile, moveAgentToTile, inventoryCount, logEvent,
-  getVisibleTiles, getVisibleAgents, getEffectiveVision,
-  isNight, getCycleInfo, getNightDamageMultiplier, getHpRegenAmount
+  getVisibleTiles, getVisibleAgents, getVisibleMobs, getEffectiveVision,
+  isNight, getCycleInfo, getNightDamageMultiplier, getHpRegenAmount,
+  createMob, addMob, removeMob, moveMob, spawnMobsInZone
 };
